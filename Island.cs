@@ -206,7 +206,7 @@ class Island : Window
     UIElement[] pages = new UIElement[8];
     Border[] dots = new Border[8];
     ScrollViewer clipScroll;
-    Button btnPlay, btnAwake, btnAuto, calTitleBtn;
+    Button btnPlay, btnAwake, btnAuto, calTitleBtn, btnLyricRefresh;
     TextBlock clockFull, tabTitle, topClock, botClock, titleText;
     TextBlock tTitle, tArtist, tPos, tDur, lStat, lOff, lPlainT, lHint, tCpu, tRam, tDisk, tBat;
     TextBlock[] ly = new TextBlock[5];
@@ -220,8 +220,8 @@ class Island : Window
     Dictionary<string, double> offsets = new Dictionary<string, double>();
     Dictionary<string, LRes> cache = new Dictionary<string, LRes>();
     string lkey = "";
-    string curTi = "";
-    bool lsynced, playingNow, open, back, awake, isDragging, quitting, clipDirty = true;
+    string curTi = "", curAlbum = "";
+    bool lsynced, playingNow, open, back, awake, isDragging, quitting, clipDirty = true, lyricConnectionError;
     double basePos = -1, offset, curDur, dragRatio, cpuPct, collH = CH, wheelAcc;
     string titleShown = "";
     bool titleOn;
@@ -595,6 +595,13 @@ class Island : Window
         lStat.TextWrapping = TextWrapping.Wrap; lStat.TextAlignment = TextAlignment.Center; lStat.TextTrimming = TextTrimming.None;
         lPlainT = T("", 0.85, 11.5); lPlainT.TextWrapping = TextWrapping.Wrap; lPlainT.TextAlignment = TextAlignment.Center; lPlainT.TextTrimming = TextTrimming.None;
         lPlain = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, Content = lPlainT, Visibility = Visibility.Collapsed };
+        btnLyricRefresh = SB("\u21BB", delegate { RetryLyrics(); });
+        btnLyricRefresh.ToolTip = "Coba hubungkan kembali ke LRCLIB";
+        btnLyricRefresh.IsEnabled = false;
+        btnLyricRefresh.Focusable = false;
+        Grid lyricHeader = new Grid { Height = 28 };
+        btnLyricRefresh.HorizontalAlignment = HorizontalAlignment.Right;
+        lyricHeader.Children.Add(btnLyricRefresh);
         Grid lyricArea = new Grid { Height = 126, ClipToBounds = true };
         lyricArea.Children.Add(lStat); lyricArea.Children.Add(lSync); lyricArea.Children.Add(lPlain);
         lOff = T("0.0s", 0.7, 11); lOff.VerticalAlignment = VerticalAlignment.Center; lOff.TextAlignment = TextAlignment.Center; lOff.MinWidth = 36;
@@ -603,7 +610,7 @@ class Island : Window
         StackPanel offRow = Row(btnRom, SB("\u23EA", delegate { SetOffset(offset - 0.5); }), lOff, SB("\u23E9", delegate { SetOffset(offset + 0.5); }), btnPop);
         offRow.HorizontalAlignment = HorizontalAlignment.Center; offRow.Margin = new Thickness(0, 4, 0, 0);
         lHint = T("", 0.4, 9.5); lHint.TextWrapping = TextWrapping.Wrap; lHint.TextAlignment = TextAlignment.Center; lHint.TextTrimming = TextTrimming.None;
-        pages[1] = Col(lyricArea, offRow, lHint);
+        pages[1] = Col(lyricHeader, lyricArea, offRow, lHint);
 
         // 4: Kalender
         calGrid = new UniformGrid { Columns = 7, Rows = 7, Height = 122 };
@@ -654,8 +661,10 @@ class Island : Window
         StackPanel presets = Row(SB("5m", delegate { StartTimer(5); }), SB("10m", delegate { StartTimer(10); }), SB("15m", delegate { StartTimer(15); }), SB("25m", delegate { StartTimer(25); }));
         presets.HorizontalAlignment = HorizontalAlignment.Center;
         btnPause = SB("\u25B6", delegate { StartPause(); }); btnPause.ToolTip = "Mulai timer";
+        btnPause.FontSize = 22; btnPause.Padding = new Thickness(18, 8, 18, 8); btnPause.MinWidth = 62; btnPause.MinHeight = 48;
         Button btnCancelTimer = SB("\u25A0", delegate { CancelTimer(); }); btnCancelTimer.ToolTip = "Hentikan timer";
-        StackPanel tctl = Row(btnPause, SB("+1m", delegate { AddTimer(1); }), btnCancelTimer);
+        btnCancelTimer.FontSize = 22; btnCancelTimer.Padding = new Thickness(18, 8, 18, 8); btnCancelTimer.MinWidth = 62; btnCancelTimer.MinHeight = 48;
+        StackPanel tctl = Row(btnPause, btnCancelTimer);
         tctl.HorizontalAlignment = HorizontalAlignment.Center; tctl.Margin = new Thickness(0, 6, 0, 0);
         btnStopAlarm = SB("\U0001F515 Matikan alarm", delegate { StopAlarm(); });
         btnStopAlarm.Background = Accent; btnStopAlarm.HorizontalAlignment = HorizontalAlignment.Center; btnStopAlarm.Margin = new Thickness(0, 6, 0, 0);
@@ -1567,13 +1576,6 @@ class Island : Window
         }
     }
 
-    void AddTimer(int minutes)
-    {
-        if (tPaused) { tLeft = tLeft.Add(TimeSpan.FromMinutes(minutes)); tTimer.Text = Hms(Math.Ceiling(tLeft.TotalSeconds)); UpdateCollapsed(); }
-        else if (endT == DateTime.MinValue) StartSec(DigSeconds() + minutes * 60.0);
-        else { endT = endT.AddMinutes(minutes); TimerTick(); }
-    }
-
     void CancelTimer()
     {
         StopAlarm();
@@ -1825,6 +1827,7 @@ class Island : Window
         string title = ti.Length > 0 ? ti : "Tidak ada media";
         if (tTitle.Text != title) tTitle.Text = title;
         curTi = ti;
+        curAlbum = al;
         if (tArtist.Text != ar) tArtist.Text = ar;
         string collapsed = (pl && ti.Length > 0) ? ti : "";
         if (mediaColl != collapsed) { mediaColl = collapsed; UpdateCollapsed(); }
@@ -1845,16 +1848,28 @@ class Island : Window
         if (ti.Length == 0) { SetStat("Putar lagu untuk menampilkan lirik"); return; }
         LRes cr;
         if (cache.TryGetValue(key, out cr)) { ApplyLyrics(cr); return; }
+        SearchLyricsAsync(ti, ar, al, dur, key);
+    }
+
+    void RetryLyrics()
+    {
+        if (!lyricConnectionError || string.IsNullOrEmpty(curTi)) return;
+        string key = curTi + "\u0001" + tArtist.Text;
+        cache.Remove(key);
+        SearchLyricsAsync(curTi, tArtist.Text, curAlbum, curDur, key);
+    }
+
+    void SearchLyricsAsync(string title, string artist, string album, double duration, string key)
+    {
         SetStat("Mencari lirik...");
-        string t0 = ti, a0 = ar, b0 = al, k0 = key; double d0 = dur;
         System.Threading.ThreadPool.QueueUserWorkItem(delegate
         {
             LRes r = null;
-            try { r = Fetch(t0, a0, b0, d0); } catch { }
+            try { r = Fetch(title, artist, album, duration); } catch { }
             Dispatcher.BeginInvoke(new Action(delegate
             {
-                if (r != null && !r.err) cache[k0] = r;
-                if (lkey == k0) ApplyLyrics(r);
+                if (r != null && !r.err) cache[key] = r;
+                if (lkey == key) ApplyLyrics(r);
             }));
         });
     }
@@ -1925,12 +1940,16 @@ class Island : Window
     void SetStat(string t)
     {
         romKind = 0; popIdx = -2; UpdateRomButtons();
+        lyricConnectionError = t == "Tidak bisa terhubung ke LRCLIB. Periksa internet.";
+        if (btnLyricRefresh != null) btnLyricRefresh.IsEnabled = lyricConnectionError;
         lStat.Text = t; lStat.Visibility = Visibility.Visible;
         lSync.Visibility = Visibility.Collapsed; lPlain.Visibility = Visibility.Collapsed;
     }
 
     void ApplyLyrics(LRes r)
     {
+        lyricConnectionError = false;
+        if (btnLyricRefresh != null) btnLyricRefresh.IsEnabled = false;
         lines.Clear(); lsynced = false; curIdx = -2; popIdx = -2; plainSrc = ""; plainRom = ""; romKind = 0; UpdateRomButtons();
         if (r == null) { SetStat("Lirik tidak ditemukan"); return; }
         if (r.err) { SetStat("Tidak bisa terhubung ke LRCLIB. Periksa internet."); return; }
@@ -2630,11 +2649,11 @@ class Island : Window
     {
         if (candidate == null) return false;
         if (current == null) return true;
-        bool candidateHasLyrics = candidate.synced.Length > 0 || candidate.plain.Length > 0;
-        bool currentHasLyrics = current.synced.Length > 0 || current.plain.Length > 0;
-        if (candidateHasLyrics != currentHasLyrics) return candidateHasLyrics;
+        int candidateQuality = candidate.synced.Length > 0 ? 2 : (candidate.plain.Length > 0 ? 1 : 0);
+        int currentQuality = current.synced.Length > 0 ? 2 : (current.plain.Length > 0 ? 1 : 0);
+        if (candidateQuality != currentQuality) return candidateQuality > currentQuality;
         if (candidate.score != current.score) return candidate.score > current.score;
-        return candidate.synced.Length > 0 && current.synced.Length == 0;
+        return false;
     }
 
     static bool TrackMatches(string name, string track, string artist)
@@ -2664,20 +2683,6 @@ class Island : Window
             if (!tokens.Contains(token)) tokens.Add(token);
         }
         return tokens;
-    }
-
-    static double ResultScore(string name, string artist, double duration, double requestedDuration, string preferredTitle)
-    {
-        List<string> requested = MatchTokens(preferredTitle);
-        List<string> result = MatchTokens(name + " " + artist);
-        int overlap = 0;
-        foreach (string token in requested)
-            if (result.Contains(token)) overlap++;
-        if (requested.Count == 0) return 0;
-        double score = overlap * 10000 + (overlap * 1000.0 / requested.Count);
-        if (result.Count > 0) score += overlap * 100.0 / result.Count;
-        if (requestedDuration > 0 && duration > 0) score -= Math.Abs(duration - requestedDuration);
-        return score;
     }
 
     static void AddLQuery(List<LQuery> queries, string title, string artist)
@@ -2727,6 +2732,20 @@ class Island : Window
         foreach (string candidate in TitleCandidates(title, artist))
             AddLQuery(queries, candidate, artist);
         return queries;
+    }
+
+    static double ResultScore(string name, string artist, double duration, double requestedDuration, string preferredTitle)
+    {
+        List<string> requested = MatchTokens(preferredTitle);
+        List<string> result = MatchTokens(name + " " + artist);
+        int overlap = 0;
+        foreach (string token in requested)
+            if (result.Contains(token)) overlap++;
+        if (requested.Count == 0) return 0;
+        double score = overlap * 10000 + (overlap * 1000.0 / requested.Count);
+        if (result.Count > 0) score += overlap * 100.0 / result.Count;
+        if (requestedDuration > 0 && duration > 0) score -= Math.Abs(duration - requestedDuration);
+        return score;
     }
 
     static LRes Pick(object o, double dur, string track, string artist, string preferredTitle)
