@@ -12,7 +12,7 @@ Island punya 8 tab. Pindah antar tab dengan tombol ▲ / ▼ atau titik penunjuk
 | --- | --- |
 | Musik | Judul, artis, bar progres yang bisa digeser, tombol putar/jeda/sebelumnya/berikutnya |
 | Lirik | Lirik tersinkron, penyesuaian offset, mode romaji/romanisasi (Jepang, Korea), dan lirik melayang (pop out) yang bisa digeser |
-| Timer | Timer dengan preset, jeda, tambah 1 menit, dan alarm (media yang sedang diputar otomatis dijeda saat alarm berbunyi) |
+| Timer | Timer dengan preset, tombol putar/jeda dan berhenti, tambah 1 menit, dan alarm (media yang sedang diputar otomatis dijeda saat alarm berbunyi) |
 | Suara | Volume utama dan volume per aplikasi, klik ikon untuk mute |
 | Kalender | Kalender Indonesia dengan hari libur nasional dan cuti bersama (lihat di bawah) |
 | Clipboard | Riwayat salinan, klik untuk menyalin ulang |
@@ -36,6 +36,7 @@ Menambah tahun baru: di `Island.cs`, tambahkan baris `Hd(d, tahun, bulan, tangga
 Tombol pop out di tab Lirik menampilkan lirik sebagai pil melayang di dekat bawah layar.
 
 - Geser pilnya dengan mouse ke mana saja. Pil tidak bisa digeser keluar dari area kerja layar.
+- Nonaktifkan lalu aktifkan lagi pop out untuk mengembalikan pil ke posisi awal; ukuran pil dibuat ringkas agar tidak mengganggu.
 - Klik dua kali pada pil untuk mengembalikannya ke posisi awal.
 - Bagian yang kosong di sekitar pil tidak menghalangi klik ke aplikasi di bawahnya.
 
@@ -48,7 +49,6 @@ Saat timer habis dan alarm berbunyi, semua media yang sedang diputar (Spotify, Y
 - Windows 10 atau 11
 - .NET Framework 4.x (sudah bawaan Windows; dipakai lewat `csc.exe`)
 - Windows PowerShell 5.1 (bawaan Windows)
-- Chrome atau Edge, hanya jika ingin memakai lirik dari YouTube
 
 ## Cara memakai
 
@@ -60,15 +60,6 @@ Jalankan `build.bat` di folder proyek. Skrip ini mencari `csc.exe` bawaan Window
 
 Buka `WinIsle.exe`. Simpan `media.ps1` dan `kana.ps1` **di folder yang sama** dengan exe-nya, karena keduanya dipakai untuk membaca media dan mengubah kanji ke romaji.
 
-### 3. Lirik dari YouTube (opsional)
-
-1. Buka `chrome://extensions` (atau `edge://extensions`).
-2. Aktifkan **Developer mode**.
-3. Pilih **Load unpacked**, lalu pilih folder proyek ini.
-4. Putar lagu di YouTube yang punya caption/lirik manual.
-
-Ekstensi mengirim lirik ke aplikasi lewat `http://127.0.0.1:47834/lyrics`. Server lokal ini hanya menerima kiriman yang membawa header `X-WinIsle`, dan hanya bisa diakses dari komputer yang sama.
-
 ## Struktur proyek
 
 | File | Fungsi |
@@ -77,14 +68,11 @@ Ekstensi mengirim lirik ke aplikasi lewat `http://127.0.0.1:47834/lyrics`. Serve
 | `build.bat` | Build ke `WinIsle.exe` |
 | `media.ps1` | Membaca dan mengontrol media yang sedang diputar |
 | `kana.ps1` | Membaca kanji menjadi hiragana untuk romaji |
-| `manifest.json` | Manifest ekstensi browser |
-| `background.js` | Service worker ekstensi, meneruskan lirik ke aplikasi |
-| `lyrics.js` | Mengambil dan memilah caption YouTube menjadi lirik |
 
 ## Catatan
 
 - Hanya untuk Windows; beberapa fitur memakai API Windows (Core Audio, clipboard, registry).
-- Lirik YouTube hanya muncul jika ekstensi aktif dan videonya punya caption manual yang terbaca sebagai lirik.
+- Lirik dicari dari LRCLIB (tersinkron), lalu NetEase (tersinkron), kemudian lirik polos LRCLIB.
 - Jika autostart diaktifkan, entri disimpan di registry pengguna (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
 - Jika ada error saat berjalan, catatannya ditulis ke `error.log` di folder aplikasi.
 

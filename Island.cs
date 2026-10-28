@@ -195,7 +195,10 @@ class Island : Window
     // ---------- UI ----------
     Border isl, seekFill, titleHost;
     Canvas titleCanvas;
-    Grid miniRoot, expRoot, seekBar;
+    Grid miniRoot, expRoot, seekBar, shell;
+    Canvas glowCanvas;
+    Border glowBody;
+    System.Windows.Shapes.Path topLobe, bottomLobe;
     UniformGrid calGrid;
     UIElement[] pages = new UIElement[8];
     Border[] dots = new Border[8];
@@ -214,12 +217,7 @@ class Island : Window
     Dictionary<string, double> offsets = new Dictionary<string, double>();
     Dictionary<string, LRes> cache = new Dictionary<string, LRes>();
     string lkey = "";
-    // Lirik dari caption YouTube (dikirim ekstensi browser lewat localhost)
-    class YtL { public string n, lrc; public double dur; public DateTime at; }
-    List<YtL> ytStore = new List<YtL>();
-    HashSet<string> ytDone = new HashSet<string>();
     string curTi = "";
-    const int YtPort = 47834;
     bool lsynced, playingNow, open, back, awake, isDragging, quitting, clipDirty = true;
     double basePos = -1, offset, curDur, dragRatio, cpuPct, collH = CH, wheelAcc;
     string titleShown = "";
@@ -270,6 +268,35 @@ class Island : Window
     }
 
     static SolidColorBrush Rgb(byte r, byte g, byte b) { return new SolidColorBrush(Color.FromRgb(r, g, b)); }
+
+    void UpdateGlowContour()
+    {
+        if (isl == null || isl.ActualWidth <= 0 || isl.ActualHeight <= 0) return;
+        double w = isl.ActualWidth, h = isl.ActualHeight;
+        Point p = isl.TransformToAncestor(shell).Transform(new Point(0, 0));
+        if (glowCanvas == null || glowBody == null || topLobe == null || bottomLobe == null) return;
+
+        const double extW = 28, extH = 14;
+        string ew = extW.ToString("0.###", IC);
+        string c1 = (extW * 0.4).ToString("0.###", IC);
+        string c2 = (extW * 0.85).ToString("0.###", IC);
+
+        topLobe.Data = Geometry.Parse("M 0," + extH.ToString("0.###", IC) + " C " + c1 + "," + extH.ToString("0.###", IC) + " " +
+            c2 + "," + (extH * 0.95).ToString("0.###", IC) + " " + ew + ",0 L " + ew + "," + extH.ToString("0.###", IC) + " Z");
+        bottomLobe.Data = Geometry.Parse("M 0,0 C " + c1 + ",0 " + c2 + "," +
+            (extH * 0.05).ToString("0.###", IC) + " " + ew + "," + extH.ToString("0.###", IC) +
+            " L " + ew + ",0 Z");
+        glowBody.Width = w;
+        glowBody.Height = h;
+        topLobe.Width = bottomLobe.Width = extW;
+        topLobe.Height = bottomLobe.Height = extH;
+        Canvas.SetLeft(glowBody, p.X);
+        Canvas.SetTop(glowBody, p.Y);
+        Canvas.SetLeft(topLobe, p.X + w - extW);
+        Canvas.SetTop(topLobe, p.Y - extH);
+        Canvas.SetLeft(bottomLobe, p.X + w - extW);
+        Canvas.SetTop(bottomLobe, p.Y + h);
+    }
 
     static TextBlock T(string s, double op, double sz)
     {
@@ -337,7 +364,6 @@ class Island : Window
         calY = DateTime.Today.Year; calM = DateTime.Today.Month;
 
         AutoStartInit();
-        StartYtServer();
         BuildMini();
         BuildPages();
         BuildExpanded();
@@ -345,12 +371,41 @@ class Island : Window
         Grid root = new Grid();
         root.Children.Add(miniRoot);
         root.Children.Add(expRoot);
+        glowCanvas = new Canvas { IsHitTestVisible = false };
+        System.Windows.Media.Effects.DropShadowEffect glow = new System.Windows.Media.Effects.DropShadowEffect
+        {
+            Color = Colors.White, BlurRadius = 12, ShadowDepth = 0, Opacity = 0.35
+        };
+        glowCanvas.Effect = glow;
+        glowBody = new Border
+        {
+            Background = Brushes.Black, CornerRadius = new CornerRadius(12, 0, 0, 12), IsHitTestVisible = false
+        };
+        topLobe = new System.Windows.Shapes.Path
+        {
+            Fill = Brushes.Black, Stretch = Stretch.Fill, IsHitTestVisible = false
+        };
+        bottomLobe = new System.Windows.Shapes.Path
+        {
+            Fill = Brushes.Black, Stretch = Stretch.Fill, IsHitTestVisible = false
+        };
+        glowCanvas.Children.Add(glowBody);
+        glowCanvas.Children.Add(topLobe);
+        glowCanvas.Children.Add(bottomLobe);
         isl = new Border
         {
-            Background = Brushes.Black, CornerRadius = new CornerRadius(26, 0, 0, 26), Width = CW, Height = CH,
-            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, ClipToBounds = true, Child = root
+            Background = Brushes.Black, CornerRadius = new CornerRadius(12, 0, 0, 12), Margin = new Thickness(12, 12, 0, 12),
+            Width = CW, Height = CH,
+            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, ClipToBounds = true,
+            Child = root
         };
-        Content = isl;
+        shell = new Grid();
+        shell.Children.Add(glowCanvas);
+        shell.Children.Add(isl);
+        Content = shell;
+        isl.SizeChanged += delegate(object s, SizeChangedEventArgs e) { UpdateGlowContour(); };
+        SizeChanged += delegate { UpdateGlowContour(); };
+        UpdateGlowContour();
         isl.PreviewMouseWheel += Wheel;
         isl.PreviewMouseDown += delegate { if (editing && !tTimer.IsMouseOver) EndEdit(true); };
         Deactivated += delegate { if (editing) EndEdit(false); };
@@ -534,7 +589,7 @@ class Island : Window
         Grid lyricArea = new Grid { Height = 126, ClipToBounds = true };
         lyricArea.Children.Add(lStat); lyricArea.Children.Add(lSync); lyricArea.Children.Add(lPlain);
         lOff = T("0.0s", 0.7, 11); lOff.VerticalAlignment = VerticalAlignment.Center; lOff.TextAlignment = TextAlignment.Center; lOff.MinWidth = 36;
-        btnRom = SB("Aa", delegate { ToggleRom(); }); btnRom.ToolTip = "Lirik latin (romaji / romanisasi)"; btnRom.Visibility = Visibility.Collapsed;
+        btnRom = SB("Aa", delegate { ToggleRom(); }); btnRom.ToolTip = "Lirik latin (romaji / romanisasi)"; btnRom.Visibility = Visibility.Visible;
         btnPop = SB("\u2750", delegate { TogglePop(); }); btnPop.ToolTip = "Pop out: lirik melayang. Geser untuk memindahkan, klik dua kali untuk mengembalikan";
         StackPanel offRow = Row(btnRom, SB("\u23EA", delegate { SetOffset(offset - 0.5); }), lOff, SB("\u23E9", delegate { SetOffset(offset + 0.5); }), btnPop);
         offRow.HorizontalAlignment = HorizontalAlignment.Center; offRow.Margin = new Thickness(0, 4, 0, 0);
@@ -589,8 +644,9 @@ class Island : Window
         };
         StackPanel presets = Row(SB("5m", delegate { StartTimer(5); }), SB("10m", delegate { StartTimer(10); }), SB("15m", delegate { StartTimer(15); }), SB("25m", delegate { StartTimer(25); }));
         presets.HorizontalAlignment = HorizontalAlignment.Center;
-        btnPause = SB("\u25B6 Mulai", delegate { StartPause(); });
-        StackPanel tctl = Row(btnPause, SB("+1m", delegate { AddTimer(1); }), SB("Batal", delegate { CancelTimer(); }));
+        btnPause = SB("\u25B6", delegate { StartPause(); }); btnPause.ToolTip = "Mulai timer";
+        Button btnCancelTimer = SB("\u25A0", delegate { CancelTimer(); }); btnCancelTimer.ToolTip = "Hentikan timer";
+        StackPanel tctl = Row(btnPause, SB("+1m", delegate { AddTimer(1); }), btnCancelTimer);
         tctl.HorizontalAlignment = HorizontalAlignment.Center; tctl.Margin = new Thickness(0, 6, 0, 0);
         btnStopAlarm = SB("\U0001F515 Matikan alarm", delegate { StopAlarm(); });
         btnStopAlarm.Background = Accent; btnStopAlarm.HorizontalAlignment = HorizontalAlignment.Center; btnStopAlarm.Margin = new Thickness(0, 6, 0, 0);
@@ -1068,6 +1124,9 @@ class Island : Window
     {
         if (o == open) return;
         open = o; outSince = DateTime.MinValue;
+        isl.CornerRadius = new CornerRadius(o ? 22 : 12, 0, 0, o ? 22 : 12);
+        if (glowBody != null) glowBody.CornerRadius = isl.CornerRadius;
+        UpdateGlowContour();
         CubicEase ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         TimeSpan du = TimeSpan.FromMilliseconds(240);
         isl.BeginAnimation(WidthProperty, new DoubleAnimation(o ? OW : CW, du) { EasingFunction = ease });
@@ -1255,10 +1314,10 @@ class Island : Window
     void BuildCal()
     {
         calGrid.Children.Clear();
-        string[] dn = { "Sn", "Sl", "Rb", "Km", "Jm", "Sb", "Mg" };
+        string[] dn = { "Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min" };
         for (int i = 0; i < 7; i++)
         {
-            TextBlock h = T(dn[i], i == 6 ? 0.9 : 0.5, 10);
+            TextBlock h = T(dn[i], i == 6 ? 0.9 : 0.5, 9.5);
             h.HorizontalAlignment = HorizontalAlignment.Center; h.VerticalAlignment = VerticalAlignment.Center;
             if (i == 6) h.Foreground = Reddish;
             calGrid.Children.Add(h);
@@ -1305,7 +1364,7 @@ class Island : Window
         if (h == null) return;
         System.Windows.Documents.Run r1 = new System.Windows.Documents.Run(d.ToString("dddd, d MMMM yyyy", idCulture));
         r1.FontWeight = FontWeights.SemiBold;
-        System.Windows.Documents.Run r2 = new System.Windows.Documents.Run((h.Cuti ? "Cuti bersama: " : "Libur nasional: ") + h.Name);
+        System.Windows.Documents.Run r2 = new System.Windows.Documents.Run((h.Cuti ? "Cuti bersama: " : "") + h.Name);
         r2.Foreground = h.Cuti ? Orange : Reddish;
         calInfo.Inlines.Add(r1);
         calInfo.Inlines.Add(new System.Windows.Documents.LineBreak());
@@ -1459,7 +1518,8 @@ class Island : Window
 
     void SetPauseBtn()
     {
-        btnPause.Content = tPaused ? "\u25B6 Lanjut" : (endT != DateTime.MinValue ? "\u23F8 Jeda" : "\u25B6 Mulai");
+        btnPause.Content = (endT != DateTime.MinValue) ? "\u23F8" : "\u25B6";
+        btnPause.ToolTip = tPaused ? "Lanjutkan timer" : (endT != DateTime.MinValue ? "Jeda timer" : "Mulai timer");
     }
 
     void StartSec(double sec)
@@ -1765,8 +1825,6 @@ class Island : Window
         lkey = key; lines.Clear(); lsynced = false; curIdx = -2;
         double o; offset = offsets.TryGetValue(key, out o) ? o : 0; ShowOff();
         if (ti.Length == 0) { SetStat("Putar lagu untuk menampilkan lirik"); return; }
-        string yl = FindYt(ti, dur);   // prioritas 1: caption YouTube
-        if (yl != null) { LRes yr = new LRes { synced = yl }; cache[key] = yr; ytDone.Add(key); ApplyLyrics(yr); return; }
         LRes cr;
         if (cache.TryGetValue(key, out cr)) { ApplyLyrics(cr); return; }
         SetStat("Mencari lirik...");
@@ -1777,7 +1835,6 @@ class Island : Window
             try { r = Fetch(t0, a0, b0, d0); } catch { }
             Dispatcher.BeginInvoke(new Action(delegate
             {
-                if (ytDone.Contains(k0)) return;   // caption YouTube sudah dipakai, jangan ditimpa
                 if (r != null && !r.err) cache[k0] = r;
                 if (lkey == k0) ApplyLyrics(r);
             }));
@@ -1833,112 +1890,6 @@ class Island : Window
     // =====================================================================
     //  LIRIK
     // =====================================================================
-    // ---------- Caption YouTube (dari ekstensi) ----------
-    static string Norm(string s) { return Regex.Replace((s ?? "").ToLowerInvariant(), @"[^\p{L}\p{N}]+", ""); }
-
-    static bool YtSame(string n, double dur, YtL y)
-    {
-        if (n.Length == 0 || y.n.Length == 0) return false;
-        if (n != y.n && !(Math.Min(n.Length, y.n.Length) >= 6 && (n.IndexOf(y.n) >= 0 || y.n.IndexOf(n) >= 0))) return false;
-        if (dur > 0 && y.dur > 0 && Math.Abs(dur - y.dur) > 3) return false;
-        return true;
-    }
-
-    string FindYt(string ti, double dur)
-    {
-        string n = Norm(ti);
-        for (int i = ytStore.Count - 1; i >= 0; i--)
-        {
-            if ((DateTime.Now - ytStore[i].at).TotalMinutes > 30) continue;
-            if (YtSame(n, dur, ytStore[i])) return ytStore[i].lrc;
-        }
-        return null;
-    }
-
-    void OnYtPayload(string title, double dur, string lrc)
-    {
-        string n = Norm(title);
-        if (n.Length == 0 || lrc.Length == 0) return;
-        for (int i = ytStore.Count - 1; i >= 0; i--)
-            if (ytStore[i].n == n)
-            {
-                if (ytStore[i].lrc == lrc) { ytStore[i].at = DateTime.Now; return; } // kiriman ulang yang sama
-                ytStore.RemoveAt(i);
-            }
-        YtL y = new YtL { n = n, lrc = lrc, dur = dur, at = DateTime.Now };
-        ytStore.Add(y);
-        if (ytStore.Count > 30) ytStore.RemoveAt(0);
-        if (string.IsNullOrEmpty(lkey) || curTi.Length == 0 || !YtSame(Norm(curTi), curDur, y)) return;
-        LRes r = new LRes { synced = lrc };
-        cache[lkey] = r; ytDone.Add(lkey); ApplyLyrics(r);
-    }
-
-    // Server HTTP mini di 127.0.0.1 (tanpa hak admin). Hanya menerima kiriman dari ekstensi (header X-WinIsle).
-    void StartYtServer()
-    {
-        try
-        {
-            System.Net.Sockets.TcpListener l = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, YtPort);
-            l.Start();
-            System.Threading.Thread th = new System.Threading.Thread(delegate()
-            {
-                while (true)
-                {
-                    System.Net.Sockets.TcpClient c = null;
-                    try { c = l.AcceptTcpClient(); HandleYt(c); }
-                    catch { }
-                    finally { if (c != null) { try { c.Close(); } catch { } } }
-                }
-            });
-            th.IsBackground = true; th.Start();
-        }
-        catch { } // port dipakai program lain: fitur caption mati, sisanya normal
-    }
-
-    static int HdrEnd(byte[] b, int n)
-    {
-        for (int i = 0; i + 3 < n; i++) if (b[i] == 13 && b[i + 1] == 10 && b[i + 2] == 13 && b[i + 3] == 10) return i;
-        return -1;
-    }
-
-    void HandleYt(System.Net.Sockets.TcpClient c)
-    {
-        c.ReceiveTimeout = 4000; c.SendTimeout = 4000;
-        Stream st = c.GetStream();
-        MemoryStream ms = new MemoryStream(); byte[] buf = new byte[16384]; int he = -1;
-        while (he < 0 && ms.Length < 65536)
-        {
-            int n = st.Read(buf, 0, buf.Length); if (n <= 0) break;
-            ms.Write(buf, 0, n); he = HdrEnd(ms.GetBuffer(), (int)ms.Length);
-        }
-        string reply = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok";
-        try
-        {
-            if (he < 0) return;
-            string head = Encoding.ASCII.GetString(ms.GetBuffer(), 0, he);
-            Match cl = Regex.Match(head, @"(?im)^content-length:\s*(\d+)");
-            bool tok = Regex.IsMatch(head, @"(?im)^x-winisle:\s*island\s*$");
-            if (!tok || !head.StartsWith("POST") || !cl.Success) { reply = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"; return; }
-            int len = int.Parse(cl.Groups[1].Value);
-            if (len <= 0 || len > 3000000) { reply = "HTTP/1.1 413 Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"; return; }
-            int have = (int)ms.Length - (he + 4);
-            byte[] body = new byte[len];
-            int got = Math.Min(have, len);
-            Array.Copy(ms.GetBuffer(), he + 4, body, 0, got);
-            while (got < len) { int n = st.Read(body, got, len - got); if (n <= 0) break; got += n; }
-            if (got < len) return;
-            System.Web.Script.Serialization.JavaScriptSerializer ser = new System.Web.Script.Serialization.JavaScriptSerializer();
-            ser.MaxJsonLength = int.MaxValue;
-            Dictionary<string, object> d = ser.DeserializeObject(Encoding.UTF8.GetString(body)) as Dictionary<string, object>;
-            if (d == null) return;
-            string title = Str(d, "title"), lrc = Str(d, "lrc"); double dur;
-            if (!double.TryParse(Str(d, "dur"), NumberStyles.Float, IC, out dur)) dur = 0;
-            Dispatcher.BeginInvoke(new Action(delegate { OnYtPayload(title, dur, lrc); }));
-        }
-        catch { }
-        finally { try { byte[] rb = Encoding.ASCII.GetBytes(reply); st.Write(rb, 0, rb.Length); } catch { } }
-    }
-
     void SetOffset(double v)
     {
         offset = Math.Round(v * 2) / 2;
@@ -2051,8 +2002,8 @@ class Island : Window
     void UpdateRomButtons()
     {
         if (btnRom == null) return;
-        btnRom.Visibility = romKind > 0 ? Visibility.Visible : Visibility.Collapsed;
-        btnRom.Background = (romOn && romKind > 0) ? Accent : Rgb(38, 38, 38);
+        btnRom.Visibility = Visibility.Visible;
+        btnRom.Background = romOn ? Accent : Rgb(38, 38, 38);
         btnPop.Background = popOn ? Accent : Rgb(38, 38, 38);
     }
 
@@ -2237,25 +2188,36 @@ class Island : Window
 
     // Romaji satu baris lewat transliterasi Google (endpoint tidak resmi, butuh internet).
     // Hasilnya sudah membaca kanji dan memisahkan kata dengan spasi. null = gagal.
-    static string RomajiOnline(string line)
+        static string RomajiOnline(string line)
     {
         const string UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
-        bool f;
-        string js = Http("https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=en&dt=t&dt=rm&q=" + E(line), out f, UA, null);
-        if (js == null) return null;
+        string[] urls = {
+            "https://clients5.google.com/translate_a/single?client=dict-chrome-ex&sl=ja&tl=en&dt=t&dt=rm&q=" + E(line),
+            "https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=en&dt=t&dt=rm&q=" + E(line)
+        };
         System.Web.Script.Serialization.JavaScriptSerializer ser = new System.Web.Script.Serialization.JavaScriptSerializer();
         ser.MaxJsonLength = int.MaxValue;
-        System.Collections.IList top = ser.DeserializeObject(js) as System.Collections.IList;
-        if (top == null || top.Count == 0) return null;
-        System.Collections.IList segs = top[0] as System.Collections.IList;
-        if (segs == null) return null;
-        for (int i = segs.Count - 1; i >= 0; i--)
+        foreach (string u in urls)
         {
-            System.Collections.IList sg = segs[i] as System.Collections.IList;
-            if (sg == null || sg.Count < 3 || sg[0] != null || sg[1] != null) continue;
-            string r = sg.Count > 3 ? sg[3] as string : null;
-            if (string.IsNullOrEmpty(r)) r = sg[2] as string;
-            if (!string.IsNullOrEmpty(r) && !HasJa(r)) return r;
+            bool f;
+            string js = Http(u, out f, UA, null);
+            if (js == null) continue;
+            System.Collections.IList top = ser.DeserializeObject(js) as System.Collections.IList;
+            if (top == null || top.Count == 0) continue;
+            System.Collections.IList segs = top[0] as System.Collections.IList;
+            if (segs == null) continue;
+            for (int i = segs.Count - 1; i >= 0; i--)
+            {
+                System.Collections.IList sg = segs[i] as System.Collections.IList;
+                if (sg == null || sg.Count < 3 || sg[0] != null || sg[1] != null) continue;
+                string r = sg.Count > 3 ? sg[3] as string : null;
+                if (string.IsNullOrEmpty(r)) r = sg[2] as string;
+                if (!string.IsNullOrEmpty(r) && !HasJa(r))
+                {
+                    r = r.Replace("\u0101", "a").Replace("\u012B", "i").Replace("\u016B", "u").Replace("\u0113", "e").Replace("\u014D", "o").Replace("\u0100", "A").Replace("\u012A", "I").Replace("\u016A", "U").Replace("\u0112", "E").Replace("\u014C", "O");
+                    return r.Trim();
+                }
+            }
         }
         return null;
     }
@@ -2267,7 +2229,7 @@ class Island : Window
         string[] res = new string[src.Count];
         int next = -1, tot = 0, okc = 0;
         List<System.Threading.Thread> ths = new List<System.Threading.Thread>();
-        for (int w = 0; w < 4; w++)
+        for (int w = 0; w < 2; w++)
         {
             System.Threading.Thread t = new System.Threading.Thread(delegate()
             {
@@ -2303,6 +2265,18 @@ class Island : Window
     // ---------- Kana -> romaji (Hepburn) ----------
     static readonly Dictionary<char, string> Kana = BuildKana();
     static readonly Dictionary<char, string> SmallCombo = BuildSmallCombo();
+    static readonly Dictionary<char, string> Kanji = new Dictionary<char, string>
+    {
+        { '\u898B', "mi" }, { '\u624B', "te" }, { '\u76EE', "me" }, { '\u6C17', "ki" }, { '\u65E5', "hi" },
+        { '\u4EBA', "hito" }, { '\u5FC3', "kokoro" }, { '\u611B', "ai" }, { '\u604B', "koi" }, { '\u5922', "yume" },
+        { '\u591C', "yoru" }, { '\u4ECA', "ima" }, { '\u79C1', "watashi" }, { '\u50D5', "boku" }, { '\u541B', "kimi" },
+        { '\u97F3', "oto" }, { '\u6B4C', "uta" }, { '\u7A7A', "sora" }, { '\u98A8', "kaze" }, { '\u96E8', "ame" },
+        { '\u82B1', "hana" }, { '\u661F', "hoshi" }, { '\u6708', "tsuki" }, { '\u5149', "hikari" }, { '\u9053', "michi" },
+        { '\u58F0', "koe" }, { '\u60F3', "omoi" }, { '\u6C9F', "namida" }, { '\u679C', "hate" }, { '\u4FE1', "shin" },
+        { '\u5C55', "ten" }, { '\u958B', "kai" }, { '\u524D', "mae" }, { '\u5F8C', "ato" }, { '\u4E0A', "ue" },
+        { '\u4E0B', "shita" }, { '\u4E2D', "naka" }, { '\u4F55', "nani" }, { '\u8AB0', "dare" }, { '\u6642', "toki" }
+    };
+    
 
     static Dictionary<char, string> BuildKana()
     {
@@ -2361,7 +2335,7 @@ class Island : Window
                 continue;
             }
             string b;
-            if (!Kana.TryGetValue(c, out b)) { sokuon = false; o.Append(JpPunct(src[i])); continue; }
+            if (!Kana.TryGetValue(c, out b) && !Kanji.TryGetValue(c, out b)) { sokuon = false; o.Append(JpPunct(src[i])); continue; }
 
             char nx = i + 1 < src.Length ? NormKana(src[i + 1]) : '\0';
             string r = b; int used = 1;
@@ -2466,16 +2440,19 @@ class Island : Window
 
     // ---------- LRCLIB ----------
     static string E(string s) { return Uri.EscapeDataString(s); }
+    static string Norm(string s) { return Regex.Replace((s ?? "").ToLowerInvariant(), @"[^\p{L}\p{N}]+", ""); }
 
     static string CleanTitle(string t)
     {
         string s = Regex.Replace(t, @"\s*[\(\[][^\)\]]*[\)\]]", "");
         s = Regex.Replace(s, @"(?i)\s*[-\u2013|]\s*(official|lyrics?|video|audio|topic|remaster).*$", "");
-        s = s.Trim();
+        s = s.Replace('\u2018', ' ').Replace('\u2019', ' ').Replace('\u201C', ' ').Replace('\u201D', ' ').Replace('\'', ' ').Replace('"', ' ');
+        s = Regex.Replace(s, @"(?i)\s*(feat\.?|ft\.?)\s+.*$", "");
+        s = Regex.Replace(s, @"\s+", " ").Trim();
         return s.Length > 0 ? s : t;
     }
 
-    static string Http(string url, out bool failed) { return Http(url, out failed, "WinIsle/1.0", null); }
+    static string Http(string url, out bool failed) { return Http(url, out failed, "WinIsle/1.0 (https://github.com/MKsafr/VorsWinIsland)", null); }
 
     static string Http(string url, out bool failed, string ua, string referer)
     {
@@ -2548,7 +2525,18 @@ class Island : Window
         const string REF = "https://music.163.com/";
         System.Web.Script.Serialization.JavaScriptSerializer ser = new System.Web.Script.Serialization.JavaScriptSerializer();
         ser.MaxJsonLength = int.MaxValue;
-        string cleanT = CleanTitle(title), nt = Norm(cleanT), na = Norm(artist);
+        string cleanT = CleanTitle(title);
+        if (artist.Length == 0)
+        {
+            int dash = cleanT.IndexOf(" - ");
+            if (dash < 0) dash = cleanT.IndexOf(" \u2013 ");
+            if (dash > 0)
+            {
+                artist = cleanT.Substring(0, dash).Trim();
+                cleanT = cleanT.Substring(dash + 3).Trim();
+            }
+        }
+        string nt = Norm(cleanT), na = Norm(artist);
         bool f;
         string js = Http("https://music.163.com/api/search/get/web?csrf_token=&type=1&offset=0&limit=8&s=" + E(cleanT + (artist.Length > 0 ? " " + artist : "")), out f, UA, REF);
         if (js == null) return null;
@@ -2605,10 +2593,20 @@ class Island : Window
         const string api = "https://lrclib.net/api/";
         int fails = 0, oks = 0; bool f;
         string cleanT = CleanTitle(title);
+        if (artist.Length == 0)
+        {
+            int dash = cleanT.IndexOf(" - ");
+            if (dash < 0) dash = cleanT.IndexOf(" \u2013 ");
+            if (dash > 0)
+            {
+                artist = cleanT.Substring(0, dash).Trim();
+                cleanT = cleanT.Substring(dash + 3).Trim();
+            }
+        }
 
         if (artist.Length > 0)
         {
-            string u = api + "get?track_name=" + E(title) + "&artist_name=" + E(artist);
+            string u = api + "get?track_name=" + E(cleanT) + "&artist_name=" + E(artist);
             if (album.Length > 0) u += "&album_name=" + E(album);
             if (dur > 0) u += "&duration=" + ((int)Math.Round(dur)).ToString(IC);
             string js = Http(u, out f);
@@ -2645,7 +2643,7 @@ class Island : Window
 // Bagian jendela yang transparan menembus klik (tidak mengganggu aplikasi di bawahnya); hanya pilnya yang menangkap mouse.
 class PopLyric : Window
 {
-    const double PW = 880, PH = 170, Gap = 28, PadX = 26, PadY = 12;   // Gap = jarak pil dari bawah area kerja (di atas taskbar)
+    const double PW = 400, PH = 64, Gap = 12, PadX = 9, PadY = 4;   // Gap = jarak pil dari bawah area kerja (di atas taskbar)
 
     [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int i);
     [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr h, int i, int v);
@@ -2679,7 +2677,7 @@ class PopLyric : Window
         };
         pill = new Border
         {
-            Background = Brushes.Black, CornerRadius = new CornerRadius(24), Child = tb, Opacity = 0,
+            Background = Brushes.Black, CornerRadius = new CornerRadius(11), Child = tb, Opacity = 0,
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, Gap)
         };
         pill.Cursor = Cursors.SizeAll;
@@ -2711,7 +2709,7 @@ class PopLyric : Window
         Rect wa = SystemParameters.WorkArea;
         double w = Math.Min(PW, wa.Width - 10);
         if (Width != w) Width = w;
-        tb.MaxWidth = w - 2 * PadX - 24;
+        tb.MaxWidth = w - 2 * PadX - 12;
         double pw = pillW > 0 ? pillW : pill.ActualWidth, ph = pillH > 0 ? pillH : pill.ActualHeight;
         double cx = moved ? userCx : wa.Left + wa.Width / 2;
         double bottom = moved ? userBottom : wa.Bottom - Gap;
@@ -2780,6 +2778,7 @@ class PopLyric : Window
     public void Reset()
     {
         gen++; busy = false; sizeSet = false; shown = null; target = "";
+        moved = false;
         tb.BeginAnimation(OpacityProperty, null); pill.BeginAnimation(OpacityProperty, null);
         tr.BeginAnimation(TranslateTransform.YProperty, null);
         pill.BeginAnimation(WidthProperty, null); pill.BeginAnimation(HeightProperty, null);
