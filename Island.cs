@@ -1,4 +1,5 @@
-﻿// VorsWin Island - versi Windows dari ide Dynamic Island milik Vorssaint (GPL-3.0).
+﻿// VorsWin Island - adaptasi Windows dari ide Dynamic Island yang dipopulerkan oleh vorssaint.
+// Proyek ini terinspirasi dari karya original tersebut dan menyertakan atribusi lisensi yang sesuai.
 // C# 5 + WPF tanpa XAML. Dikompilasi dengan csc.exe bawaan Windows (lihat build.bat).
 // Island menempel di tepi KANAN layar, di tengah secara vertikal.
 using System;
