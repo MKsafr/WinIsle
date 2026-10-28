@@ -17,7 +17,7 @@ exit /b 0
 
 :failed
 echo.
-echo BUILD GAGAL. Salin pesan error di atas dan kirim ke Claude.
+echo BUILD GAGAL.
 pause
 exit /b 1
 

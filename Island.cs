@@ -183,11 +183,14 @@ class Island : Window
 
     // ---------- Tipe bantu ----------
     class LL { public double t; public string s, r; }   // s = teks asli, r = versi latin
-    class LRes { public string synced = "", plain = ""; public bool instr, err; }
+    class LRes { public string synced = "", plain = ""; public bool instr, err; public double score; }
+    class LQuery { public string title, artist; }
 
     static readonly CultureInfo IC = CultureInfo.InvariantCulture;
     static readonly Regex Ts = new Regex(@"\[(\d+):(\d+(?:\.\d+)?)\]");
     static readonly Regex Wt = new Regex(@"<\d+:\d+(?:\.\d+)?>");
+    static readonly Dictionary<string, string> RomajiCache = new Dictionary<string, string>();
+    static readonly object RomajiCacheLock = new object();
     static readonly FontFamily FF = new FontFamily("Segoe UI, Segoe UI Symbol, Segoe UI Emoji");
     static readonly SolidColorBrush Accent = new SolidColorBrush(Color.FromRgb(30, 144, 255));
     static readonly SolidColorBrush Reddish = new SolidColorBrush(Color.FromRgb(255, 105, 97));
@@ -281,11 +284,17 @@ class Island : Window
         string c1 = (extW * 0.4).ToString("0.###", IC);
         string c2 = (extW * 0.85).ToString("0.###", IC);
 
-        topLobe.Data = Geometry.Parse("M 0," + extH.ToString("0.###", IC) + " C " + c1 + "," + extH.ToString("0.###", IC) + " " +
-            c2 + "," + (extH * 0.95).ToString("0.###", IC) + " " + ew + ",0 L " + ew + "," + extH.ToString("0.###", IC) + " Z");
-        bottomLobe.Data = Geometry.Parse("M 0,0 C " + c1 + ",0 " + c2 + "," +
-            (extH * 0.05).ToString("0.###", IC) + " " + ew + "," + extH.ToString("0.###", IC) +
-            " L " + ew + ",0 Z");
+        if (topLobe.Data == null)
+        {
+            Geometry top = Geometry.Parse("M 0," + extH.ToString("0.###", IC) + " C " + c1 + "," + extH.ToString("0.###", IC) + " " +
+                c2 + "," + (extH * 0.95).ToString("0.###", IC) + " " + ew + ",0 L " + ew + "," + extH.ToString("0.###", IC) + " Z");
+            Geometry bottom = Geometry.Parse("M 0,0 C " + c1 + ",0 " + c2 + "," +
+                (extH * 0.05).ToString("0.###", IC) + " " + ew + "," + extH.ToString("0.###", IC) +
+                " L " + ew + ",0 Z");
+            top.Freeze(); bottom.Freeze();
+            topLobe.Data = top;
+            bottomLobe.Data = bottom;
+        }
         glowBody.Width = w;
         glowBody.Height = h;
         topLobe.Width = bottomLobe.Width = extW;
@@ -420,7 +429,7 @@ class Island : Window
         ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072; // TLS 1.2
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged += delegate { Reposition(); };
 
-        Tick(80, Hover);
+        Tick(120, Hover);
         Tick(1000, Sec);
         Tick(120, LyricTick);
         Tick(250, ProgressTick);
@@ -1582,7 +1591,13 @@ class Island : Window
             StartAlarm();
             SwitchTo(2); // buka tab Timer, tapi island tetap ciut: teks muncul di pil
         }
-        else { tTimer.Text = Hms(sec); UpdateCollapsed(); }
+        else
+        {
+            string text = Hms(sec);
+            if (tTimer.Text == text) return;
+            tTimer.Text = text;
+            UpdateCollapsed();
+        }
     }
 
     // ---------- Alarm ----------
@@ -1807,11 +1822,14 @@ class Island : Window
 
     void OnMedia(string ti, string ar, string al, bool pl, double pos, double dur)
     {
-        tTitle.Text = ti.Length > 0 ? ti : "Tidak ada media";
+        string title = ti.Length > 0 ? ti : "Tidak ada media";
+        if (tTitle.Text != title) tTitle.Text = title;
         curTi = ti;
-        tArtist.Text = ar;
-        mediaColl = (pl && ti.Length > 0) ? ti : ""; UpdateCollapsed();
-        btnPlay.Content = pl ? "\u23F8" : "\u25B6";
+        if (tArtist.Text != ar) tArtist.Text = ar;
+        string collapsed = (pl && ti.Length > 0) ? ti : "";
+        if (mediaColl != collapsed) { mediaColl = collapsed; UpdateCollapsed(); }
+        string play = pl ? "\u23F8" : "\u25B6";
+        if (!Equals(btnPlay.Content, play)) btnPlay.Content = play;
         curDur = dur > 0 ? dur : 0;
         if (DateTime.Now >= seekHoldUntil)
         {
@@ -1855,11 +1873,16 @@ class Island : Window
         double p = CurPos();
         if (curDur <= 0 || p < 0)
         {
-            seekFill.Width = 0; tPos.Text = "0:00"; tDur.Text = curDur > 0 ? Fmt(curDur) : "0:00";
+            seekFill.Width = 0;
+            if (tPos.Text != "0:00") tPos.Text = "0:00";
+            string duration = curDur > 0 ? Fmt(curDur) : "0:00";
+            if (tDur.Text != duration) tDur.Text = duration;
             return;
         }
         seekFill.Width = seekBar.ActualWidth * Math.Min(1, p / curDur);
-        tPos.Text = Fmt(p); tDur.Text = Fmt(curDur);
+        string position = Fmt(p), durationText = Fmt(curDur);
+        if (tPos.Text != position) tPos.Text = position;
+        if (tDur.Text != durationText) tDur.Text = durationText;
     }
 
     void DragTo(double x)
@@ -1922,7 +1945,7 @@ class Island : Window
         }
         if (r.plain.Length > 0)
         {
-            plainSrc = r.plain; lPlainT.Text = r.plain; lPlain.ScrollToTop();
+            plainSrc = StripPlainTranslations(r.plain); lPlainT.Text = plainSrc; lPlain.ScrollToTop();
             lStat.Visibility = Visibility.Collapsed; lSync.Visibility = Visibility.Collapsed; lPlain.Visibility = Visibility.Visible;
             lHint.Text = "";
             StartRomanize();
@@ -1931,13 +1954,29 @@ class Island : Window
         SetStat("Lirik tidak ditemukan");
     }
 
+    static string StripPlainTranslations(string lyrics)
+    {
+        string[] lines = lyrics.Replace("\r", "").Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+            lines[i] = StripTranslation(lines[i]);
+        return string.Join("\n", lines);
+    }
+
+    static string StripTranslation(string line)
+    {
+        int translation = line.IndexOf('^');
+        return translation >= 0 ? line.Substring(0, translation).TrimEnd() : line;
+    }
+
     void ParseLrc(string src)
     {
         foreach (string raw in src.Split('\n'))
         {
             MatchCollection ms = Ts.Matches(raw);
             if (ms.Count == 0) continue;
-            string txt = Wt.Replace(Ts.Replace(raw, ""), "").Trim();
+            string rawText = Wt.Replace(Ts.Replace(raw, ""), "").Trim();
+            string txt = StripTranslation(rawText).Trim();
+            if (rawText.Length > 0 && txt.Length == 0) continue;
             if (txt.Length == 0) txt = "\u266A";
             foreach (Match m in ms)
                 lines.Add(new LL { t = int.Parse(m.Groups[1].Value) * 60 + double.Parse(m.Groups[2].Value, IC), s = txt });
@@ -1959,8 +1998,14 @@ class Island : Window
         }
         double p = CurPos();
         double pos = (p < 0 ? 0 : p) + offset;
-        int idx = -1;
-        for (int i = 0; i < lines.Count; i++) { if (lines[i].t <= pos) idx = i; else break; }
+        int lo = 0, hi = lines.Count;
+        while (lo < hi)
+        {
+            int mid = lo + (hi - lo) / 2;
+            if (lines[mid].t <= pos) lo = mid + 1;
+            else hi = mid;
+        }
+        int idx = lo - 1;
 
         if (ui)
         {
@@ -2049,8 +2094,8 @@ class Island : Window
     void StartRomanize()
     {
         List<string> src = new List<string>();
-        if (lsynced) { foreach (LL l in lines) src.Add(l.s); }
-        else foreach (string x in plainSrc.Replace("\r", "").Split('\n')) src.Add(x);
+        if (lsynced) { foreach (LL l in lines) src.Add(l.s.Normalize(NormalizationForm.FormKC)); }
+        else foreach (string x in plainSrc.Replace("\r", "").Split('\n')) src.Add(x.Normalize(NormalizationForm.FormKC));
         romKind = DetectScript(src);
         UpdateRomButtons();
         if (romKind == 0) return;
@@ -2074,20 +2119,45 @@ class Island : Window
         {
             Dictionary<string, string> map = new Dictionary<string, string>();
             List<string> on = null;
-            try { on = RomajiOnlineAll(uniq); } catch { }
+            Action<int, string> onResult = delegate(int index, string result)
+            {
+                Dictionary<string, string> snapshot;
+                lock (map)
+                {
+                    map[uniq[index]] = result;
+                    snapshot = new Dictionary<string, string>(map);
+                }
+                List<string> partial = new List<string>();
+                for (int i = 0; i < segs.Count; i++) partial.Add(JoinRom(segs[i], snapshot));
+                Dispatcher.BeginInvoke(new Action(delegate { if (lkey == k0) ApplyRom(partial); }));
+            };
+            try { on = RomajiOnlineAll(uniq, onResult); } catch { }
+            List<string> unresolved = new List<string>();
             if (on != null)
             {
-                for (int i = 0; i < uniq.Count; i++) if (on[i] != null) map[uniq[i]] = on[i];
+                for (int i = 0; i < uniq.Count; i++)
+                {
+                    if (on[i] != null) lock (map) map[uniq[i]] = on[i];
+                    else unresolved.Add(uniq[i]);
+                }
             }
-            else
+            else unresolved.AddRange(uniq);
+            if (unresolved.Count > 0)
             {
                 List<string> yomi = null;
-                try { yomi = ReadingsViaPs(uniq); } catch { }
-                if (yomi == null || yomi.Count != uniq.Count) return;
-                for (int i = 0; i < uniq.Count; i++) map[uniq[i]] = KanaToRomaji(yomi[i]);
+                try { yomi = ReadingsViaPs(unresolved); } catch { }
+                if (yomi == null || yomi.Count != unresolved.Count)
+                {
+                    if (map.Count == 0) return;
+                }
+                else
+                    for (int i = 0; i < unresolved.Count; i++)
+                        lock (map) map[unresolved[i]] = KanaToRomaji(yomi[i]);
             }
+            Dictionary<string, string> finalMap;
+            lock (map) finalMap = new Dictionary<string, string>(map);
             List<string> res = new List<string>();
-            for (int i = 0; i < segs.Count; i++) res.Add(JoinRom(segs[i], map));
+            for (int i = 0; i < segs.Count; i++) res.Add(JoinRom(segs[i], finalMap));
             Dispatcher.BeginInvoke(new Action(delegate { if (lkey == k0) ApplyRom(res); }));
         });
     }
@@ -2191,7 +2261,8 @@ class Island : Window
         static string RomajiOnline(string line)
     {
         const string UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
-        string[] urls = {
+            line = line.Normalize(NormalizationForm.FormKC);
+            string[] urls = {
             "https://clients5.google.com/translate_a/single?client=dict-chrome-ex&sl=ja&tl=en&dt=t&dt=rm&q=" + E(line),
             "https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=en&dt=t&dt=rm&q=" + E(line)
         };
@@ -2222,14 +2293,21 @@ class Island : Window
         return null;
     }
 
-    // Romaji semua baris (4 permintaan paralel). Elemen null = baris itu tidak bisa diubah (pakai hasil cepat).
+    // Romaji semua baris (2 permintaan paralel). Elemen null = baris itu tidak bisa diubah (pakai hasil cepat).
     // Mengembalikan null kalau separuh lebih baris gagal (offline / diblokir).
-    static List<string> RomajiOnlineAll(List<string> src)
+    static List<string> RomajiOnlineAll(List<string> src, Action<int, string> onResult)
     {
         string[] res = new string[src.Count];
         int next = -1, tot = 0, okc = 0;
+        lock (RomajiCacheLock)
+            for (int i = 0; i < src.Count; i++)
+                if (RomajiCache.TryGetValue(src[i], out res[i]))
+                {
+                    System.Threading.Interlocked.Increment(ref okc);
+                    onResult(i, res[i]);
+                }
         List<System.Threading.Thread> ths = new List<System.Threading.Thread>();
-        for (int w = 0; w < 2; w++)
+        for (int w = 0; w < 4; w++)
         {
             System.Threading.Thread t = new System.Threading.Thread(delegate()
             {
@@ -2239,9 +2317,21 @@ class Island : Window
                     if (i >= src.Count) return;
                     if (!HasJa(src[i])) continue;
                     System.Threading.Interlocked.Increment(ref tot);
+                    if (res[i] != null) { System.Threading.Interlocked.Increment(ref okc); continue; }
                     string r = null;
-                    try { r = RomajiOnline(src[i]); } catch { }
-                    if (r != null) { res[i] = r; System.Threading.Interlocked.Increment(ref okc); }
+                    for (int attempt = 0; attempt < 2 && r == null; attempt++)
+                    {
+                        if (attempt > 0) System.Threading.Thread.Sleep(300);
+                        try { r = RomajiOnline(src[i]); } catch { }
+                    }
+                    if (r != null)
+                    {
+                        res[i] = r;
+                        lock (RomajiCacheLock)
+                            if (RomajiCache.Count < 2000) RomajiCache[src[i]] = r;
+                        System.Threading.Interlocked.Increment(ref okc);
+                        onResult(i, r);
+                    }
                 }
             });
             t.IsBackground = true; t.Start(); ths.Add(t);
@@ -2444,12 +2534,51 @@ class Island : Window
 
     static string CleanTitle(string t)
     {
-        string s = Regex.Replace(t, @"\s*[\(\[][^\)\]]*[\)\]]", "");
-        s = Regex.Replace(s, @"(?i)\s*[-\u2013|]\s*(official|lyrics?|video|audio|topic|remaster).*$", "");
-        s = s.Replace('\u2018', ' ').Replace('\u2019', ' ').Replace('\u201C', ' ').Replace('\u201D', ' ').Replace('\'', ' ').Replace('"', ' ');
+        string s = Regex.Replace(t, @"\s*[\(\[【（][^\)\]】）]*[\)\]】）]", "");
+        s = StripVideoSuffix(s);
+        s = s.Replace('\u2018', ' ').Replace('\u2019', ' ').Replace('\u201C', ' ').Replace('\u201D', ' ')
+            .Replace('\u300C', ' ').Replace('\u300D', ' ').Replace('\u300E', ' ').Replace('\u300F', ' ')
+            .Replace('\'', ' ').Replace('"', ' ');
         s = Regex.Replace(s, @"(?i)\s*(feat\.?|ft\.?)\s+.*$", "");
         s = Regex.Replace(s, @"\s+", " ").Trim();
         return s.Length > 0 ? s : t;
+    }
+
+    static string StripVideoSuffix(string title)
+    {
+        string s = Regex.Replace(title, @"(?i)\s*[-\u2013|]\s*(official|lyrics?|video|audio|topic|remaster).*$", "");
+        return Regex.Replace(s, @"(?i)\s*(?:[-\u2013\u2014|]\s*)?(official(?:\s+(?:(?:music|lyric)\s+)?(?:video|mv))?|lyrics?|music\s+video|performance\s+film|video|mv|audio|topic|remaster)\s*$", "");
+    }
+
+    static List<string> TitleCandidates(string title, string artist)
+    {
+        List<string> candidates = new List<string>();
+        Match slash = Regex.Match(title, @"[/／]");
+        if (slash.Success && Regex.IsMatch(title, @"(?i)\bcover\b|カバー|歌ってみた"))
+            candidates.Add(CleanTitle(title.Substring(0, slash.Index)));
+
+        string cleaned = CleanTitle(title);
+        if (!string.IsNullOrWhiteSpace(artist))
+        {
+            string artistPrefix = artist.Trim();
+            if (cleaned.Length > artistPrefix.Length &&
+                Norm(cleaned.Substring(0, artistPrefix.Length)) == Norm(artistPrefix) &&
+                (char.IsWhiteSpace(cleaned[artistPrefix.Length]) || "-\u2013\u2014:|'\u2018\u2019\"\u201C\u201D\u300C\u300E".IndexOf(cleaned[artistPrefix.Length]) >= 0))
+            {
+                string track = cleaned.Substring(artistPrefix.Length).TrimStart(' ', '-', '\u2013', '\u2014', ':', '|', '\'', '\u2018', '\u2019', '"', '\u201C', '\u201D', '\u300C', '\u300E');
+                candidates.Add(CleanTitle(track));
+            }
+            Match suffix = Regex.Match(cleaned, @"\s*[-\u2013\u2014]\s*(.+)$");
+            if (suffix.Success && Norm(suffix.Groups[1].Value) == Norm(artist))
+                candidates.Add(CleanTitle(cleaned.Substring(0, suffix.Index)));
+        }
+        candidates.Add(cleaned);
+
+        List<string> unique = new List<string>();
+        foreach (string candidate in candidates)
+            if (!string.IsNullOrWhiteSpace(candidate) && !unique.Contains(candidate))
+                unique.Add(candidate);
+        return unique;
     }
 
     static string Http(string url, out bool failed) { return Http(url, out failed, "WinIsle/1.0 (https://github.com/MKsafr/VorsWinIsland)", null); }
@@ -2487,34 +2616,156 @@ class Island : Window
 
     static bool Has(LRes r) { return r != null && (r.instr || r.synced.Length > 0 || r.plain.Length > 0); }
 
-    static LRes Pick(object o, double dur)
+    static bool ArtistMatches(string resultArtist, string artist)
+    {
+        string normalizedArtist = Norm(artist);
+        if (normalizedArtist.Length == 0) return true;
+        if (Norm(resultArtist) == normalizedArtist) return true;
+        foreach (string credit in Regex.Split(resultArtist, @"[,，、&＆/／]|\s+(?:and|feat\.?|ft\.?)\s+", RegexOptions.IgnoreCase))
+            if (Norm(credit) == normalizedArtist) return true;
+        return false;
+    }
+
+    static bool BetterResult(LRes candidate, LRes current)
+    {
+        if (candidate == null) return false;
+        if (current == null) return true;
+        bool candidateHasLyrics = candidate.synced.Length > 0 || candidate.plain.Length > 0;
+        bool currentHasLyrics = current.synced.Length > 0 || current.plain.Length > 0;
+        if (candidateHasLyrics != currentHasLyrics) return candidateHasLyrics;
+        if (candidate.score != current.score) return candidate.score > current.score;
+        return candidate.synced.Length > 0 && current.synced.Length == 0;
+    }
+
+    static bool TrackMatches(string name, string track, string artist)
+    {
+        string normalizedName = Norm(CleanTitle(name)), normalizedTrack = Norm(track);
+        if (normalizedName == normalizedTrack) return true;
+        if (normalizedTrack.Length >= 4 && normalizedName.IndexOf(normalizedTrack, StringComparison.Ordinal) >= 0)
+            return true;
+        foreach (string candidate in TitleCandidates(name, artist))
+            if (Norm(candidate) == Norm(track)) return true;
+        foreach (string candidate in TitleCandidates(track, artist))
+            if (Norm(candidate) == normalizedName) return true;
+        return false;
+    }
+
+    static List<string> MatchTokens(string text)
+    {
+        List<string> tokens = new List<string>();
+        foreach (Match match in Regex.Matches((text ?? "").ToLowerInvariant(), @"[\p{L}\p{N}]+"))
+        {
+            string token = match.Value;
+            if (token == "feat" || token == "ft" || token == "featuring" || token == "official" ||
+                token == "original" || token == "anime" || token == "music" || token == "lyric" ||
+                token == "lyrics" || token == "video" || token == "mv" || token == "audio" ||
+                token == "topic" || token == "remaster" || token == "hololive")
+                continue;
+            if (!tokens.Contains(token)) tokens.Add(token);
+        }
+        return tokens;
+    }
+
+    static double ResultScore(string name, string artist, double duration, double requestedDuration, string preferredTitle)
+    {
+        List<string> requested = MatchTokens(preferredTitle);
+        List<string> result = MatchTokens(name + " " + artist);
+        int overlap = 0;
+        foreach (string token in requested)
+            if (result.Contains(token)) overlap++;
+        if (requested.Count == 0) return 0;
+        double score = overlap * 10000 + (overlap * 1000.0 / requested.Count);
+        if (result.Count > 0) score += overlap * 100.0 / result.Count;
+        if (requestedDuration > 0 && duration > 0) score -= Math.Abs(duration - requestedDuration);
+        return score;
+    }
+
+    static void AddLQuery(List<LQuery> queries, string title, string artist)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return;
+        foreach (LQuery q in queries)
+            if (Norm(q.title) == Norm(title) && Norm(q.artist) == Norm(artist)) return;
+        queries.Add(new LQuery { title = title, artist = artist });
+    }
+
+    static List<LQuery> LyricQueries(string title, string artist)
+    {
+        List<LQuery> queries = new List<LQuery>();
+        AddLQuery(queries, title, artist);
+        MatchCollection annotations = Regex.Matches(title, @"[\(\[【（]([^\)\]】）]+)[\)\]】）]");
+        foreach (Match annotation in annotations)
+        {
+            string content = annotation.Groups[1].Value;
+            Match feature = Regex.Match(content, @"(?i)(?:feat\.?|ft\.?|featuring)\s+(.+)$");
+            if (feature.Success)
+                foreach (string candidate in TitleCandidates(title, artist))
+                    AddLQuery(queries, candidate, feature.Groups[1].Value.Trim());
+            if (!Regex.IsMatch(content, @"[/／|&＆、,，]")) continue;
+            foreach (string credit in Regex.Split(content, @"[/／|&＆、,，]+"))
+                AddLQuery(queries, CleanTitle(title), credit.Trim());
+        }
+        string symbolTitle = Regex.Replace(title, @"[\(\[【（][^\)\]】）]*[\)\]】）]", " ");
+        symbolTitle = StripVideoSuffix(symbolTitle);
+        symbolTitle = Regex.Replace(symbolTitle, @"\s*(?:feat\.?|ft\.?)\s+.*$", "", RegexOptions.IgnoreCase);
+        List<string> parts = new List<string>();
+        foreach (string part in Regex.Split(symbolTitle.Normalize(NormalizationForm.FormKC), @"[\p{P}\p{S}]+"))
+        {
+            string candidate = CleanTitle(part);
+            string normalized = Norm(candidate);
+            if (normalized.Length < 2 || normalized == "official" || normalized == "music" ||
+                normalized == "video" || normalized == "mv" || normalized == "lyrics" ||
+                normalized == "lyric" || normalized == "audio" || normalized == "topic" ||
+                normalized == "remaster")
+                continue;
+            if (!parts.Contains(candidate)) parts.Add(candidate);
+        }
+        for (int i = parts.Count - 1; i > 0; i--)
+        {
+            AddLQuery(queries, parts[i], parts[i - 1]);
+            AddLQuery(queries, parts[i - 1], parts[i]);
+        }
+        foreach (string candidate in TitleCandidates(title, artist))
+            AddLQuery(queries, candidate, artist);
+        return queries;
+    }
+
+    static LRes Pick(object o, double dur, string track, string artist, string preferredTitle)
     {
         System.Collections.IEnumerable arr = o as System.Collections.IEnumerable;
         if (o is Dictionary<string, object> || arr == null) return null;
-        Dictionary<string, object> best = null; double bs = double.MaxValue;
+        LRes best = null;
         foreach (object it in arr)
         {
             Dictionary<string, object> d = it as Dictionary<string, object>;
             if (d == null) continue;
+            string name = Str(d, "trackName");
+            if (name.Length == 0) name = Str(d, "name");
+            if (!TrackMatches(name, track, artist)) continue;
+            string resultArtist = Str(d, "artistName");
+            if (!ArtistMatches(resultArtist, artist) && !ArtistMatches(name, artist)) continue;
             bool sy = Str(d, "syncedLyrics").Length > 0, pl = Str(d, "plainLyrics").Length > 0;
             object ins; bool instr = d.TryGetValue("instrumental", out ins) && ins is bool && (bool)ins;
             if (!sy && !pl && !instr) continue;
             double dd = 0; double.TryParse(Str(d, "duration"), NumberStyles.Float, IC, out dd);
-            if (dur > 0 && dd > 0 && Math.Abs(dd - dur) > 15) continue; // kemungkinan lagu lain
-            double score = (dur > 0 && dd > 0 ? Math.Abs(dd - dur) : 5) + (sy ? 0 : 1000);
-            if (score < bs) { bs = score; best = d; }
+            if (dur > 0 && dd > 0 && Math.Abs(dd - dur) > 45) continue; // judul dan artis harus persis cocok untuk beda durasi MV
+            LRes candidate = ToRes(d);
+            candidate.score = ResultScore(name, resultArtist, dd, dur, preferredTitle);
+            if (BetterResult(candidate, best)) best = candidate;
         }
-        return ToRes(best);
+        return best;
     }
 
     // Urutan: LRCLIB (berwaktu) -> NetEase (berwaktu) -> lirik polos LRCLIB.
     static LRes Fetch(string title, string artist, string album, double dur)
     {
         LRes r = FetchLrclib(title, artist, album, dur);
-        if (r != null && !r.err && (r.instr || r.synced.Length > 0)) return r;
+        if (r != null && !r.err && r.synced.Length > 0) return r;
         LRes ne = null;
-        try { ne = FetchNetease(title, artist, dur); } catch { }
-        if (ne != null && ne.synced.Length > 0) return ne;
+        foreach (string candidate in TitleCandidates(title, artist))
+        {
+            try { ne = FetchNetease(candidate, artist, dur); } catch { }
+            if (ne != null && ne.synced.Length > 0) return ne;
+        }
         return r;
     }
 
@@ -2592,49 +2843,66 @@ class Island : Window
         ser.MaxJsonLength = int.MaxValue;
         const string api = "https://lrclib.net/api/";
         int fails = 0, oks = 0; bool f;
-        string cleanT = CleanTitle(title);
-        if (artist.Length == 0)
+        LRes bestResult = null;
+        bool preferSpecificTitle = Norm(title) != Norm(CleanTitle(title));
+        List<LQuery> queries = LyricQueries(title, artist);
+        foreach (LQuery query in queries)
         {
-            int dash = cleanT.IndexOf(" - ");
-            if (dash < 0) dash = cleanT.IndexOf(" \u2013 ");
-            if (dash > 0)
+            if (query.artist.Length > 0 && !preferSpecificTitle)
             {
-                artist = cleanT.Substring(0, dash).Trim();
-                cleanT = cleanT.Substring(dash + 3).Trim();
+                string u = api + "get?track_name=" + E(query.title) + "&artist_name=" + E(query.artist);
+                if (album.Length > 0) u += "&album_name=" + E(album);
+                if (dur > 0) u += "&duration=" + ((int)Math.Round(dur)).ToString(IC);
+                string js = Http(u, out f);
+                if (f) fails++; else oks++;
+                if (js != null)
+                {
+                    try
+                    {
+                        Dictionary<string, object> data = ser.DeserializeObject(js) as Dictionary<string, object>;
+                        string resultTrack = data == null ? "" : Str(data, "trackName");
+                        if (resultTrack.Length == 0 && data != null) resultTrack = Str(data, "name");
+                        string resultArtist = data == null ? "" : Str(data, "artistName");
+                        if (data != null && TrackMatches(resultTrack, query.title, query.artist) &&
+                            (ArtistMatches(resultArtist, query.artist) || ArtistMatches(resultTrack, query.artist)))
+                        {
+                            LRes r = ToRes(data);
+                            double resultDuration = 0;
+                            double.TryParse(Str(data, "duration"), NumberStyles.Float, IC, out resultDuration);
+                            if (!(dur > 0 && resultDuration > 0 && Math.Abs(resultDuration - dur) > 45))
+                            {
+                                r.score = ResultScore(resultTrack, resultArtist, resultDuration, dur, title);
+                                if (Has(r) && BetterResult(r, bestResult)) bestResult = r;
+                            }
+                        }
+                    }
+                    catch { }
+                }
             }
-        }
 
-        if (artist.Length > 0)
-        {
-            string u = api + "get?track_name=" + E(cleanT) + "&artist_name=" + E(artist);
-            if (album.Length > 0) u += "&album_name=" + E(album);
-            if (dur > 0) u += "&duration=" + ((int)Math.Round(dur)).ToString(IC);
-            string js = Http(u, out f);
-            if (f) fails++; else oks++;
-            if (js != null)
+            List<string> qs = new List<string>();
+            if (query.artist.Length > 0)
             {
-                try { LRes r = ToRes(ser.DeserializeObject(js) as Dictionary<string, object>); if (Has(r)) return r; } catch { }
+                qs.Add("track_name=" + E(query.title) + "&artist_name=" + E(query.artist));
+                qs.Add("q=" + E(query.title + " " + query.artist));
             }
-        }
-
-        List<string> qs = new List<string>();
-        if (artist.Length > 0)
-        {
-            qs.Add("track_name=" + E(cleanT) + "&artist_name=" + E(artist));
-            qs.Add("q=" + E(cleanT + " " + artist));
-        }
-        qs.Add("q=" + E(cleanT));
-        if (cleanT != title) qs.Add("q=" + E(title));
-        foreach (string q in qs)
-        {
-            string js = Http(api + "search?" + q, out f);
-            if (f) { fails++; continue; }
-            oks++;
-            if (js == null) continue;
-            try { LRes best = Pick(ser.DeserializeObject(js), dur); if (Has(best)) return best; } catch { }
+            qs.Add("q=" + E(query.title));
+            foreach (string q in qs)
+            {
+                string js = Http(api + "search?" + q, out f);
+                if (f) { fails++; continue; }
+                oks++;
+                if (js == null) continue;
+                try
+                {
+                    LRes best = Pick(ser.DeserializeObject(js), dur, query.title, query.artist, title);
+                    if (BetterResult(best, bestResult)) bestResult = best;
+                }
+                catch { }
+            }
         }
         if (fails > 0 && oks == 0) return new LRes { err = true };
-        return null;
+        return bestResult;
     }
 }
 
@@ -2678,7 +2946,8 @@ class PopLyric : Window
         pill = new Border
         {
             Background = Brushes.Black, CornerRadius = new CornerRadius(11), Child = tb, Opacity = 0,
-            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, Gap)
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, Gap),
+            ClipToBounds = true
         };
         pill.Cursor = Cursors.SizeAll;
         pill.MouseLeftButtonDown += PillDown;
@@ -2819,8 +3088,12 @@ class PopLyric : Window
             return;
         }
         tb.Text = t;
-        tb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        double w = Math.Ceiling(tb.DesiredSize.Width) + 2 * PadX, h = Math.Ceiling(tb.DesiredSize.Height) + 2 * PadY;
+        tb.Width = double.NaN;
+        tb.Measure(new Size(tb.MaxWidth, double.PositiveInfinity));
+        double textWidth = Math.Min(tb.MaxWidth, Math.Ceiling(tb.DesiredSize.Width));
+        tb.Width = textWidth;
+        tb.Measure(new Size(textWidth, double.PositiveInfinity));
+        double w = textWidth + 2 * PadX, h = Math.Ceiling(tb.DesiredSize.Height) + 2 * PadY;
         pillW = w; pillH = h; Place();   // pil baru bisa lebih lebar: pastikan tetap di dalam layar
         TimeSpan din = TimeSpan.FromMilliseconds(220);
         CubicEase ease = new CubicEase { EasingMode = EasingMode.EaseOut };
