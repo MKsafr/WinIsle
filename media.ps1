@@ -1,9 +1,10 @@
-# media.ps1 - dipakai VorsWinIsland. Hanya karakter ASCII di file ini (supaya aman di PowerShell 5.1).
+# media.ps1 - dipakai WinIsle. Hanya karakter ASCII di file ini (supaya aman di PowerShell 5.1).
 #
 # Mode 1 (default): berjalan terus, mencetak 1 baris JSON per detik berisi info media yang sedang diputar.
-#                   Berhenti sendiri kalau proses VorsWinIsland (-ParentPid) sudah tidak ada.
+#                   Berhenti sendiri kalau proses WinIsle (-ParentPid) sudah tidak ada.
 # Mode 2 (-SeekTo detik): pindahkan posisi lagu lalu keluar.
-param([double]$SeekTo = -1, [int]$ParentPid = 0)
+# Mode 3 (-PauseAll): jeda semua sesi media yang sedang Playing (dipakai saat alarm timer), lalu keluar.
+param([double]$SeekTo = -1, [int]$ParentPid = 0, [switch]$PauseAll)
 
 $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
@@ -31,6 +32,18 @@ if ($SeekTo -ge 0) {
     if ($s) {
         $ticks = [long]($SeekTo * 10000000)
         Await ($s.TryChangePlaybackPositionAsync($ticks)) ([bool]) | Out-Null
+    }
+    exit
+}
+
+# ---------- Mode jeda semua ----------
+if ($PauseAll) {
+    foreach ($s in @($mgr.GetSessions())) {
+        try {
+            if ("$($s.GetPlaybackInfo().PlaybackStatus)" -eq 'Playing') {
+                Await ($s.TryPauseAsync()) ([bool]) | Out-Null
+            }
+        } catch {}
     }
     exit
 }

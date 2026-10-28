@@ -1,4 +1,4 @@
-# kana.ps1 - dipakai VorsWinIsland untuk membaca kanji (menghasilkan hiragana) sebelum diubah ke romaji.
+# kana.ps1 - dipakai WinIsle untuk membaca kanji (menghasilkan hiragana) sebelum diubah ke romaji.
 # Memakai Windows.Globalization.JapanesePhoneticAnalyzer (bawaan Windows). Hanya karakter ASCII di file ini.
 # Satu baris masuk (-InFile, UTF-8) = satu baris keluar. Kalau analyzer tidak tersedia, baris dikembalikan apa adanya.
 param([string]$InFile)

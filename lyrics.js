@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const LOG = (...a) => console.log('[Vors lirik]', ...a);
+  const LOG = (...a) => console.log('[WinIsle lirik]', ...a);
 
   // Nama track yang jelas bukan lirik (komentar, terjemahan, deskripsi audio, dsb.)
   const BAD_NAME = /commentar|comment|解説|コメンタリ|コメント|translat|訳|번역|해설|traduc|audio.?desc|description|making|behind/i;
@@ -118,7 +118,7 @@
   }
 
   function send(body) {
-    try { chrome.runtime.sendMessage({ type: 'vors-lyrics', body }, () => void chrome.runtime.lastError); } catch (e) {}
+    try { chrome.runtime.sendMessage({ type: 'winisle-lyrics', body }, () => void chrome.runtime.lastError); } catch (e) {}
   }
 
   async function run(id) {

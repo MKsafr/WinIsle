@@ -1,4 +1,4 @@
-﻿// VorsWin Island - adaptasi Windows dari ide Dynamic Island yang dipopulerkan oleh vorssaint.
+﻿// WinIsle - adaptasi Windows dari ide "island" (pil mengambang) yang dipopulerkan oleh vorssaint.
 // Proyek ini terinspirasi dari karya original tersebut dan menyertakan atribusi lisensi yang sesuai.
 // C# 5 + WPF tanpa XAML. Dikompilasi dengan csc.exe bawaan Windows (lihat build.bat).
 // Island menempel di tepi KANAN layar, di tengah secara vertikal.
@@ -34,7 +34,7 @@ static class Prog
     static void Main()
     {
         bool created;
-        System.Threading.Mutex m = new System.Threading.Mutex(true, "VorsWinIsland", out created);
+        System.Threading.Mutex m = new System.Threading.Mutex(true, "WinIsle", out created);
         if (!created) return;
         Application app = new Application();
         app.DispatcherUnhandledException += delegate(object s, DispatcherUnhandledExceptionEventArgs e)
@@ -250,6 +250,8 @@ class Island : Window
     System.Windows.Documents.Run rTitle, rCd, rTitle2, rCd2;
     TextBlock titleText2;
     CultureInfo idCulture;
+    TextBlock calInfo;      // keterangan tanggal terpilih / ringkasan bulan (tab Kalender)
+    DateTime? calSel;       // tanggal yang sedang dipilih di kalender
 
     // ---------- Pembuat kontrol ----------
     static ControlTemplate btnTpl;
@@ -329,7 +331,7 @@ class Island : Window
     {
         WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent;
         Topmost = true; ShowInTaskbar = false; ShowActivated = false; ResizeMode = ResizeMode.NoResize;
-        Width = WW; Height = WH; Title = "VorsWin Island";
+        Width = WW; Height = WH; Title = "WinIsle";
         Reposition();
         try { idCulture = new CultureInfo("id-ID"); } catch { idCulture = CultureInfo.CurrentCulture; }
         calY = DateTime.Today.Year; calM = DateTime.Today.Month;
@@ -353,7 +355,7 @@ class Island : Window
         isl.PreviewMouseDown += delegate { if (editing && !tTimer.IsMouseOver) EndEdit(true); };
         Deactivated += delegate { if (editing) EndEdit(false); };
 
-        tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Visible = true, Text = "VorsWin Island" };
+        tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Visible = true, Text = "WinIsle" };
         Forms.ContextMenuStrip cm = new Forms.ContextMenuStrip();
         cm.Items.Add("Ke belakang / ke depan (Ctrl+Alt+I)", null, delegate { ToggleBack(); });
         cm.Items.Add("Keluar", null, delegate { ExitApp(); });
@@ -533,25 +535,27 @@ class Island : Window
         lyricArea.Children.Add(lStat); lyricArea.Children.Add(lSync); lyricArea.Children.Add(lPlain);
         lOff = T("0.0s", 0.7, 11); lOff.VerticalAlignment = VerticalAlignment.Center; lOff.TextAlignment = TextAlignment.Center; lOff.MinWidth = 36;
         btnRom = SB("Aa", delegate { ToggleRom(); }); btnRom.ToolTip = "Lirik latin (romaji / romanisasi)"; btnRom.Visibility = Visibility.Collapsed;
-        btnPop = SB("\u2750", delegate { TogglePop(); }); btnPop.ToolTip = "Pop out: lirik melayang di dekat bawah layar";
+        btnPop = SB("\u2750", delegate { TogglePop(); }); btnPop.ToolTip = "Pop out: lirik melayang. Geser untuk memindahkan, klik dua kali untuk mengembalikan";
         StackPanel offRow = Row(btnRom, SB("\u23EA", delegate { SetOffset(offset - 0.5); }), lOff, SB("\u23E9", delegate { SetOffset(offset + 0.5); }), btnPop);
         offRow.HorizontalAlignment = HorizontalAlignment.Center; offRow.Margin = new Thickness(0, 4, 0, 0);
         lHint = T("", 0.4, 9.5); lHint.TextWrapping = TextWrapping.Wrap; lHint.TextAlignment = TextAlignment.Center; lHint.TextTrimming = TextTrimming.None;
         pages[1] = Col(lyricArea, offRow, lHint);
 
         // 4: Kalender
-        calGrid = new UniformGrid { Columns = 7, Rows = 7, Height = 132 };
-        calTitleBtn = SB("", delegate { calY = DateTime.Today.Year; calM = DateTime.Today.Month; BuildCal(); });
+        calGrid = new UniformGrid { Columns = 7, Rows = 7, Height = 122 };
+        calTitleBtn = SB("", delegate { calY = DateTime.Today.Year; calM = DateTime.Today.Month; calSel = null; BuildCal(); });
         calTitleBtn.Background = Brushes.Transparent; calTitleBtn.FontWeight = FontWeights.SemiBold; calTitleBtn.ToolTip = "Kembali ke bulan ini";
         Button prev = SB("\u25C0", delegate { MoveMonth(-1); });
         Button next = SB("\u25B6", delegate { MoveMonth(1); });
-        Grid calNav = new Grid { Margin = new Thickness(0, 4, 0, 6) };
+        Grid calNav = new Grid { Margin = new Thickness(0, 2, 0, 2) };
         calNav.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         calNav.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         calNav.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Grid.SetColumn(prev, 0); Grid.SetColumn(calTitleBtn, 1); Grid.SetColumn(next, 2);
         calNav.Children.Add(prev); calNav.Children.Add(calTitleBtn); calNav.Children.Add(next);
-        pages[4] = Col(calNav, calGrid);
+        calInfo = T("", 0.9, 10); calInfo.TextWrapping = TextWrapping.Wrap; calInfo.TextTrimming = TextTrimming.None;
+        calInfo.Height = 40; calInfo.Margin = new Thickness(2, 3, 2, 0);
+        pages[4] = Col(calNav, calGrid, calInfo);
 
         // 2: Timer
         tTimer = new TextBox
@@ -1197,7 +1201,7 @@ class Island : Window
     void Sec()
     {
         RefreshClock();
-        if (calToday != DateTime.Today) { calToday = DateTime.Today; calY = calToday.Year; calM = calToday.Month; BuildCal(); }
+        if (calToday != DateTime.Today) { calToday = DateTime.Today; calY = calToday.Year; calM = calToday.Month; calSel = null; BuildCal(); }
 
         long idle, kern, usr;
         if (GetSystemTimes(out idle, out kern, out usr))
@@ -1244,6 +1248,7 @@ class Island : Window
         calM += delta;
         if (calM > 12) { calM = 1; calY++; }
         if (calM < 1) { calM = 12; calY--; }
+        calSel = null;
         BuildCal();
     }
 
@@ -1265,15 +1270,137 @@ class Island : Window
         int dim = DateTime.DaysInMonth(calY, calM);
         for (int day = 1; day <= dim; day++)
         {
+            DateTime dd = new DateTime(calY, calM, day);
+            Hol hol = HolidayOf(dd);
             TextBlock t = T(day.ToString(), 1, 11);
             t.HorizontalAlignment = HorizontalAlignment.Center; t.VerticalAlignment = VerticalAlignment.Center;
-            Border b = new Border { Child = t, CornerRadius = new CornerRadius(9), Margin = new Thickness(1) };
-            bool isToday = (calY == today.Year && calM == today.Month && day == today.Day);
-            if (isToday) b.Background = Accent;
-            else if ((off + day - 1) % 7 == 6) t.Foreground = Reddish;
+            bool isToday = (dd == today);
+            Border b = new Border
+            {
+                Child = t, CornerRadius = new CornerRadius(9), Margin = new Thickness(1),
+                Background = isToday ? (Brush)Accent : Brushes.Transparent
+            };
+            if (hol != null) b.Cursor = Cursors.Hand;
+            if (hol != null) t.FontWeight = FontWeights.SemiBold;
+            if (!isToday)
+            {
+                if (hol != null) t.Foreground = hol.Cuti ? Orange : Reddish;   // merah = libur nasional, oranye = cuti bersama
+                else if ((off + day - 1) % 7 == 6) t.Foreground = Reddish;      // Minggu
+            }
+            // Tanggal libur: tekan untuk menampilkan keterangan (tekan lagi untuk menyembunyikan). Tanggal biasa: tidak ada teks.
+            b.MouseLeftButtonDown += delegate { calSel = (hol != null && !(calSel.HasValue && calSel.Value == dd)) ? (DateTime?)dd : null; BuildCal(); };
             calGrid.Children.Add(b);
         }
         calTitleBtn.Content = first.ToString("MMMM yyyy", idCulture);
+        UpdateCalInfo();
+    }
+
+    // Keterangan di bawah kalender: hanya muncul kalau tanggal libur sedang ditekan.
+    void UpdateCalInfo()
+    {
+        calInfo.Inlines.Clear();
+        if (!calSel.HasValue) return;
+        DateTime d = calSel.Value;
+        Hol h = HolidayOf(d);
+        if (h == null) return;
+        System.Windows.Documents.Run r1 = new System.Windows.Documents.Run(d.ToString("dddd, d MMMM yyyy", idCulture));
+        r1.FontWeight = FontWeights.SemiBold;
+        System.Windows.Documents.Run r2 = new System.Windows.Documents.Run((h.Cuti ? "Cuti bersama: " : "Libur nasional: ") + h.Name);
+        r2.Foreground = h.Cuti ? Orange : Reddish;
+        calInfo.Inlines.Add(r1);
+        calInfo.Inlines.Add(new System.Windows.Documents.LineBreak());
+        calInfo.Inlines.Add(r2);
+    }
+
+    // ---------- Hari libur nasional Indonesia ----------
+    // Sumber: SKB 3 Menteri (Menag, Menaker, MenPANRB) tentang Hari Libur Nasional dan Cuti Bersama.
+    //   2026: SKB No. 1497/2025, 2/2025, 5/2025 (19 Sep 2025)   2027: SKB No. 1205/2026, 3/2026, 2/2026 (15 Sep 2026)
+    // Libur tetap (tanggalnya sama tiap tahun) dihitung otomatis untuk semua tahun.
+    // Libur yang berpindah-pindah (keagamaan, Imlek, Nyepi, dst.) harus diisi per tahun di BuildHolidays().
+    // Tanggal Idulfitri/Iduladha 1448 H (2027) mengikuti SKB dan bisa berubah
+    // kalau nanti ditetapkan lain oleh Menteri Agama.
+    class Hol { public string Name; public bool Cuti; }
+
+    static readonly Dictionary<DateTime, Hol> HolMoving = BuildHolidays();
+
+    static string FixedHoliday(DateTime d)
+    {
+        switch (d.Month * 100 + d.Day)
+        {
+            case 101: return "Tahun Baru Masehi";
+            case 501: return "Hari Buruh Internasional";
+            case 601: return "Hari Lahir Pancasila";
+            case 817: return "Proklamasi Kemerdekaan RI";
+            case 1225: return "Hari Raya Natal";
+        }
+        return null;
+    }
+
+    static Hol HolidayOf(DateTime d)
+    {
+        Hol m;
+        HolMoving.TryGetValue(d.Date, out m);
+        string f = FixedHoliday(d);
+        if (f == null) return m;
+        return new Hol { Name = m == null ? f : f + " \u2022 " + m.Name, Cuti = false };
+    }
+
+    // Hd(kamus, tahun, bulan, tanggal, nama, cutiBersama)
+    static void Hd(Dictionary<DateTime, Hol> d, int y, int m, int day, string name, bool cuti)
+    {
+        d[new DateTime(y, m, day)] = new Hol { Name = name, Cuti = cuti };
+    }
+
+    static Dictionary<DateTime, Hol> BuildHolidays()
+    {
+        Dictionary<DateTime, Hol> d = new Dictionary<DateTime, Hol>();
+
+        // ===== 2026 =====
+        Hd(d, 2026, 1, 16, "Isra Mikraj Nabi Muhammad SAW", false);
+        Hd(d, 2026, 2, 16, "Tahun Baru Imlek 2577 Kongzili", true);
+        Hd(d, 2026, 2, 17, "Tahun Baru Imlek 2577 Kongzili", false);
+        Hd(d, 2026, 3, 18, "Hari Suci Nyepi (Tahun Baru Saka 1948)", true);
+        Hd(d, 2026, 3, 19, "Hari Suci Nyepi (Tahun Baru Saka 1948)", false);
+        Hd(d, 2026, 3, 20, "Hari Raya Idulfitri 1447 H", true);
+        Hd(d, 2026, 3, 21, "Hari Raya Idulfitri 1447 H", false);
+        Hd(d, 2026, 3, 22, "Hari Raya Idulfitri 1447 H", false);
+        Hd(d, 2026, 3, 23, "Hari Raya Idulfitri 1447 H", true);
+        Hd(d, 2026, 3, 24, "Hari Raya Idulfitri 1447 H", true);
+        Hd(d, 2026, 4, 3, "Wafat Yesus Kristus", false);
+        Hd(d, 2026, 4, 5, "Hari Kebangkitan Yesus Kristus (Paskah)", false);
+        Hd(d, 2026, 5, 14, "Kenaikan Yesus Kristus", false);
+        Hd(d, 2026, 5, 15, "Kenaikan Yesus Kristus", true);
+        Hd(d, 2026, 5, 27, "Hari Raya Iduladha 1447 H", false);
+        Hd(d, 2026, 5, 28, "Hari Raya Iduladha 1447 H", true);
+        Hd(d, 2026, 5, 31, "Hari Raya Waisak 2570 BE", false);
+        Hd(d, 2026, 6, 16, "Tahun Baru Islam 1 Muharam 1448 H", false);
+        Hd(d, 2026, 8, 25, "Maulid Nabi Muhammad SAW", false);
+        Hd(d, 2026, 12, 24, "Hari Raya Natal", true);
+
+        // ===== 2027 =====
+        Hd(d, 2027, 1, 5, "Isra Mikraj Nabi Muhammad SAW (1448 H)", false);
+        Hd(d, 2027, 2, 5, "Tahun Baru Imlek 2578 Kongzili", true);
+        Hd(d, 2027, 2, 6, "Tahun Baru Imlek 2578 Kongzili", false);
+        Hd(d, 2027, 3, 8, "Hari Suci Nyepi (Tahun Baru Saka 1949)", false);
+        Hd(d, 2027, 3, 9, "Hari Raya Idulfitri 1448 H", true);
+        Hd(d, 2027, 3, 10, "Hari Raya Idulfitri 1448 H", false);
+        Hd(d, 2027, 3, 11, "Hari Raya Idulfitri 1448 H", false);
+        Hd(d, 2027, 3, 12, "Hari Raya Idulfitri 1448 H", true);
+        Hd(d, 2027, 3, 15, "Hari Raya Idulfitri 1448 H", true);
+        Hd(d, 2027, 3, 25, "Wafat Yesus Kristus", true);
+        Hd(d, 2027, 3, 26, "Wafat Yesus Kristus", false);
+        Hd(d, 2027, 3, 28, "Hari Kebangkitan Yesus Kristus (Paskah)", false);
+        Hd(d, 2027, 5, 6, "Kenaikan Yesus Kristus", false);
+        Hd(d, 2027, 5, 17, "Hari Raya Iduladha 1448 H", false);
+        Hd(d, 2027, 5, 18, "Hari Raya Iduladha 1448 H", true);
+        Hd(d, 2027, 5, 19, "Hari Raya Waisak 2571 BE", true);
+        Hd(d, 2027, 5, 20, "Hari Raya Waisak 2571 BE", false);
+        Hd(d, 2027, 6, 6, "Tahun Baru Islam 1 Muharam 1449 H", false);
+        Hd(d, 2027, 8, 15, "Maulid Nabi Muhammad SAW", false);
+        Hd(d, 2027, 12, 24, "Hari Raya Natal", true);
+        Hd(d, 2027, 12, 26, "Isra Mikraj Nabi Muhammad SAW (1449 H)", false);
+
+        return d;
     }
 
     // =====================================================================
@@ -1405,8 +1532,24 @@ class Island : Window
         alarmOn = true;
         btnStopAlarm.Visibility = Visibility.Visible;
         UpdateCollapsed();
+        PauseAllMedia();   // jeda semua lagu/video yang sedang diputar supaya alarm langsung terdengar
         System.Threading.Thread th = new System.Threading.Thread(AlarmLoop);
         th.IsBackground = true; th.Start();
+    }
+
+    // Jeda semua sesi media Windows yang sedang berstatus Playing (Spotify, YouTube di browser, pemutar video, dst.)
+    // lewat media.ps1 -PauseAll. Jalan di proses terpisah supaya tidak menahan UI. Tidak otomatis melanjutkan setelah alarm.
+    void PauseAllMedia()
+    {
+        if (!File.Exists(ScriptPath())) return;
+        try
+        {
+            ProcessStartInfo psi = new ProcessStartInfo("powershell.exe",
+                "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + ScriptPath() + "\" -PauseAll");
+            psi.CreateNoWindow = true; psi.UseShellExecute = false;
+            Process.Start(psi);
+        }
+        catch (Exception ex) { Prog.Log(ex.ToString()); }
     }
 
     void AlarmLoop()
@@ -1487,7 +1630,7 @@ class Island : Window
         try
         {
             using (Win32.RegistryKey k = Win32.Registry.CurrentUser.OpenSubKey(RunKey))
-                return k != null && k.GetValue("VorsWinIsland") != null;
+                return k != null && k.GetValue("WinIsle") != null;
         }
         catch { return false; }
     }
@@ -1499,15 +1642,15 @@ class Island : Window
         try
         {
             string exe = "\"" + System.Reflection.Assembly.GetExecutingAssembly().Location + "\"";
-            using (Win32.RegistryKey app = Win32.Registry.CurrentUser.CreateSubKey(@"Software\VorsWinIsland"))
+            using (Win32.RegistryKey app = Win32.Registry.CurrentUser.CreateSubKey(@"Software\WinIsle"))
             using (Win32.RegistryKey run = Win32.Registry.CurrentUser.OpenSubKey(RunKey, true))
             {
                 if (app == null || run == null) return;
-                if (app.GetValue("AutoInit") == null) { app.SetValue("AutoInit", 1); run.SetValue("VorsWinIsland", exe); }
+                if (app.GetValue("AutoInit") == null) { app.SetValue("AutoInit", 1); run.SetValue("WinIsle", exe); }
                 else
                 {
-                    object cur = run.GetValue("VorsWinIsland");
-                    if (cur != null && !exe.Equals(Convert.ToString(cur))) run.SetValue("VorsWinIsland", exe);
+                    object cur = run.GetValue("WinIsle");
+                    if (cur != null && !exe.Equals(Convert.ToString(cur))) run.SetValue("WinIsle", exe);
                 }
             }
         }
@@ -1521,8 +1664,8 @@ class Island : Window
             using (Win32.RegistryKey k = Win32.Registry.CurrentUser.OpenSubKey(RunKey, true))
             {
                 if (k == null) return;
-                if (AutoStartOn()) k.DeleteValue("VorsWinIsland", false);
-                else k.SetValue("VorsWinIsland", "\"" + System.Reflection.Assembly.GetExecutingAssembly().Location + "\"");
+                if (AutoStartOn()) k.DeleteValue("WinIsle", false);
+                else k.SetValue("WinIsle", "\"" + System.Reflection.Assembly.GetExecutingAssembly().Location + "\"");
             }
         }
         catch { }
@@ -1544,7 +1687,7 @@ class Island : Window
     void StartMedia()
     {
         if (quitting) return;
-        if (!File.Exists(ScriptPath())) { SetStat("media.ps1 tidak ditemukan. Taruh satu folder dengan VorsWinIsland.exe"); return; }
+        if (!File.Exists(ScriptPath())) { SetStat("media.ps1 tidak ditemukan. Taruh satu folder dengan WinIsle.exe"); return; }
         try
         {
             ProcessStartInfo psi = new ProcessStartInfo("powershell.exe",
@@ -1730,7 +1873,7 @@ class Island : Window
         cache[lkey] = r; ytDone.Add(lkey); ApplyLyrics(r);
     }
 
-    // Server HTTP mini di 127.0.0.1 (tanpa hak admin). Hanya menerima kiriman dari ekstensi (header X-Vors).
+    // Server HTTP mini di 127.0.0.1 (tanpa hak admin). Hanya menerima kiriman dari ekstensi (header X-WinIsle).
     void StartYtServer()
     {
         try
@@ -1774,7 +1917,7 @@ class Island : Window
             if (he < 0) return;
             string head = Encoding.ASCII.GetString(ms.GetBuffer(), 0, he);
             Match cl = Regex.Match(head, @"(?im)^content-length:\s*(\d+)");
-            bool tok = Regex.IsMatch(head, @"(?im)^x-vors:\s*island\s*$");
+            bool tok = Regex.IsMatch(head, @"(?im)^x-winisle:\s*island\s*$");
             if (!tok || !head.StartsWith("POST") || !cl.Success) { reply = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"; return; }
             int len = int.Parse(cl.Groups[1].Value);
             if (len <= 0 || len > 3000000) { reply = "HTTP/1.1 413 Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"; return; }
@@ -2332,7 +2475,7 @@ class Island : Window
         return s.Length > 0 ? s : t;
     }
 
-    static string Http(string url, out bool failed) { return Http(url, out failed, "VorsWinIsland/1.0", null); }
+    static string Http(string url, out bool failed) { return Http(url, out failed, "WinIsle/1.0", null); }
 
     static string Http(string url, out bool failed, string ua, string referer)
     {
@@ -2497,8 +2640,9 @@ class Island : Window
     }
 }
 
-// Jendela pop-out: pil hitam berisi satu baris lirik, melayang sedikit di atas taskbar.
-// Klik menembus jendela ini (tidak mengganggu aplikasi di bawahnya).
+// Jendela pop-out: pil hitam berisi satu baris lirik, awalnya melayang sedikit di atas taskbar.
+// Pil bisa digeser dengan mouse (klik dua kali = kembali ke posisi awal) dan selalu ditahan di dalam area kerja layar.
+// Bagian jendela yang transparan menembus klik (tidak mengganggu aplikasi di bawahnya); hanya pilnya yang menangkap mouse.
 class PopLyric : Window
 {
     const double PW = 880, PH = 170, Gap = 28, PadX = 26, PadY = 12;   // Gap = jarak pil dari bawah area kerja (di atas taskbar)
@@ -2506,6 +2650,8 @@ class PopLyric : Window
     [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int i);
     [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr h, int i, int v);
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);
+    [DllImport("user32.dll")] static extern bool GetCursorPos(out PT p);
+    struct PT { public int X, Y; }
 
     Border pill;
     TextBlock tb;
@@ -2514,12 +2660,16 @@ class PopLyric : Window
     bool busy, sizeSet;
     int gen;
     IntPtr hwnd;
+    // Posisi pil: pusat horizontal (cx) dan tepi bawah, dalam koordinat layar (DIP)
+    bool moved, dragging;                    // moved = pengguna sudah memindahkan pil
+    double userCx, userBottom, curCx, curBottom, pillW, pillH;
+    double dragX0, dragY0, dragCx0, dragBottom0;
 
     public PopLyric()
     {
         WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent;
         Topmost = true; ShowInTaskbar = false; ShowActivated = false; ResizeMode = ResizeMode.NoResize; Focusable = false;
-        Width = PW; Height = PH; Title = "VorsWin Lirik";
+        Width = PW; Height = PH; Title = "WinIsle Lirik";
         tb = new TextBlock
         {
             Foreground = Brushes.White, FontSize = 16, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap,
@@ -2532,6 +2682,11 @@ class PopLyric : Window
             Background = Brushes.Black, CornerRadius = new CornerRadius(24), Child = tb, Opacity = 0,
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, Gap)
         };
+        pill.Cursor = Cursors.SizeAll;
+        pill.MouseLeftButtonDown += PillDown;
+        pill.MouseMove += PillMove;
+        pill.MouseLeftButtonUp += PillUp;
+        pill.LostMouseCapture += delegate { if (dragging) { dragging = false; if (moved) { userCx = curCx; userBottom = curBottom; } } };
         Content = pill;
         Place();
     }
@@ -2540,19 +2695,81 @@ class PopLyric : Window
     {
         base.OnSourceInitialized(e);
         hwnd = new WindowInteropHelper(this).Handle;
-        // NOACTIVATE + TOOLWINDOW + TRANSPARENT (klik menembus)
-        SetWindowLong(hwnd, -20, GetWindowLong(hwnd, -20) | 0x08000000 | 0x80 | 0x20);
+        // NOACTIVATE + TOOLWINDOW. Piksel yang sepenuhnya transparan menembus klik dengan sendirinya, jadi pil bisa diklik/digeser.
+        SetWindowLong(hwnd, -20, GetWindowLong(hwnd, -20) | 0x08000000 | 0x80);
     }
 
+    static double Cl(double v, double lo, double hi)
+    {
+        if (hi < lo) return (lo + hi) / 2;
+        return Math.Max(lo, Math.Min(hi, v));
+    }
+
+    // Letakkan jendela supaya pil berada di (cx, bottom) yang diminta, lalu tahan pil di dalam area kerja layar.
     public void Place()
     {
         Rect wa = SystemParameters.WorkArea;
         double w = Math.Min(PW, wa.Width - 10);
         if (Width != w) Width = w;
         tb.MaxWidth = w - 2 * PadX - 24;
-        double l = wa.Left + (wa.Width - w) / 2, t = wa.Bottom - PH;
+        double pw = pillW > 0 ? pillW : pill.ActualWidth, ph = pillH > 0 ? pillH : pill.ActualHeight;
+        double cx = moved ? userCx : wa.Left + wa.Width / 2;
+        double bottom = moved ? userBottom : wa.Bottom - Gap;
+        cx = Cl(cx, wa.Left + pw / 2, wa.Right - pw / 2);
+        bottom = Cl(bottom, wa.Top + ph, wa.Bottom);
+        curCx = cx; curBottom = bottom;
+        if (moved && !dragging) { userCx = cx; userBottom = bottom; }
+        double l = cx - w / 2, t = bottom + Gap - PH;   // pil menempel di bawah jendela dengan jarak Gap
         if (Left != l) Left = l;
         if (Top != t) Top = t;
+    }
+
+    // Posisi kursor di layar dalam DIP (GetCursorPos memakai piksel fisik).
+    bool CursorDip(out Point p)
+    {
+        p = new Point();
+        PT pt;
+        if (!GetCursorPos(out pt)) return false;
+        PresentationSource src = PresentationSource.FromVisual(this);
+        if (src == null || src.CompositionTarget == null) { p = new Point(pt.X, pt.Y); return true; }
+        p = src.CompositionTarget.TransformFromDevice.Transform(new Point(pt.X, pt.Y));
+        return true;
+    }
+
+    void PillDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left) return;
+        if (e.ClickCount >= 2)   // klik dua kali: kembali ke posisi awal
+        {
+            dragging = false; pill.ReleaseMouseCapture(); moved = false; Place();
+            e.Handled = true;
+            return;
+        }
+        Point c;
+        if (!CursorDip(out c)) return;
+        dragging = true; dragX0 = c.X; dragY0 = c.Y; dragCx0 = curCx; dragBottom0 = curBottom;
+        pill.CaptureMouse();
+        e.Handled = true;
+    }
+
+    void PillMove(object sender, MouseEventArgs e)
+    {
+        if (!dragging) return;
+        Point c;
+        if (!CursorDip(out c)) return;
+        moved = true;
+        userCx = dragCx0 + (c.X - dragX0);          // pil mengikuti kursor; Place() menahannya di dalam layar
+        userBottom = dragBottom0 + (c.Y - dragY0);
+        Place();
+    }
+
+    void PillUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!dragging) return;
+        dragging = false;
+        pill.ReleaseMouseCapture();
+        if (moved) { userCx = curCx; userBottom = curBottom; }
+        e.Handled = true;
     }
 
     public void Raise()
@@ -2605,6 +2822,7 @@ class PopLyric : Window
         tb.Text = t;
         tb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         double w = Math.Ceiling(tb.DesiredSize.Width) + 2 * PadX, h = Math.Ceiling(tb.DesiredSize.Height) + 2 * PadY;
+        pillW = w; pillH = h; Place();   // pil baru bisa lebih lebar: pastikan tetap di dalam layar
         TimeSpan din = TimeSpan.FromMilliseconds(220);
         CubicEase ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         if (!sizeSet) { pill.Width = w; pill.Height = h; sizeSet = true; }
