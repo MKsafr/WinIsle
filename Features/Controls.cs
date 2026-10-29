@@ -2,9 +2,11 @@
 using System.Text;
 using System;
 using System.Collections.Generic;
+using System.IO.Compression;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Security.Cryptography;
 using Win32 = Microsoft.Win32;
 
 partial class Island
@@ -85,36 +87,137 @@ partial class Island
                     new System.Web.Script.Serialization.JavaScriptSerializer()
                         .Deserialize<Dictionary<string, object>>(json);
 
-                object tagValue, urlValue;
+                object tagValue, assetsValue;
                 if (release == null ||
                     !release.TryGetValue("tag_name", out tagValue) ||
-                    !release.TryGetValue("html_url", out urlValue))
+                    !release.TryGetValue("assets", out assetsValue))
                     return;
 
                 string tag = Convert.ToString(tagValue);
-                string releaseUrl = Convert.ToString(urlValue);
                 Version latest, current = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
 
                 if (!Version.TryParse(tag.TrimStart('v', 'V'), out latest) ||
-                    latest.CompareTo(current) <= 0 ||
-                    string.IsNullOrWhiteSpace(releaseUrl))
+                    latest.CompareTo(current) <= 0)
                     return;
+
+                string assetName = "WinIsle-" + tag + ".zip";
+                string downloadUrl = null, digest = null;
+                IList<object> assets = assetsValue as IList<object>;
+                if (assets == null) throw new InvalidDataException("Daftar aset release tidak valid.");
+                foreach (object value in assets)
+                {
+                    Dictionary<string, object> asset = value as Dictionary<string, object>;
+                    object nameValue, urlValue, digestValue;
+                    if (asset == null || !asset.TryGetValue("name", out nameValue) ||
+                        !assetName.Equals(Convert.ToString(nameValue), StringComparison.Ordinal) ||
+                        !asset.TryGetValue("browser_download_url", out urlValue) ||
+                        !asset.TryGetValue("digest", out digestValue))
+                        continue;
+                    downloadUrl = Convert.ToString(urlValue);
+                    digest = Convert.ToString(digestValue);
+                    break;
+                }
+                Uri assetUri;
+                if (string.IsNullOrWhiteSpace(downloadUrl) ||
+                    !Uri.TryCreate(downloadUrl, UriKind.Absolute, out assetUri) ||
+                    assetUri.Scheme != Uri.UriSchemeHttps ||
+                    !assetUri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) ||
+                    string.IsNullOrWhiteSpace(digest) ||
+                    !digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Aset ZIP atau digest SHA-256 release tidak ditemukan.");
 
                 Dispatcher.BeginInvoke(new Action(delegate
                 {
                     MessageBoxResult result = MessageBox.Show(
-                        "Versi baru " + tag + " tersedia. Buka halaman unduhan?",
+                        "Versi baru " + tag + " tersedia. Unduh dan pasang sekarang? WinIsle akan ditutup selama pembaruan.",
                         "Pembaruan WinIsle",
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Information);
 
                     if (result == MessageBoxResult.Yes)
-                        System.Diagnostics.Process.Start(releaseUrl);
+                        DownloadAndInstallUpdate(downloadUrl, digest, latest);
                 }));
             }
             catch (Exception ex)
             {
                 Prog.Log("Pemeriksaan update gagal: " + ex);
+            }
+        });
+    }
+
+    void DownloadAndInstallUpdate(string downloadUrl, string expectedDigest, Version version)
+    {
+        System.Threading.ThreadPool.QueueUserWorkItem(delegate
+        {
+            string updateDir = null;
+            try
+            {
+                updateDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "WinIsle", "Updates", version.ToString(3) + "-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(updateDir);
+                string zipPath = Path.Combine(updateDir, "WinIsle.zip");
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(downloadUrl);
+                request.UserAgent = "WinIsle";
+                request.Timeout = 120000;
+                request.ReadWriteTimeout = 120000;
+                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                using (Stream input = response.GetResponseStream())
+                using (FileStream output = new FileStream(zipPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    byte[] buffer = new byte[81920];
+                    long total = 0;
+                    int count;
+                    while ((count = input.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        total += count;
+                        if (total > 200L * 1024 * 1024)
+                            throw new InvalidDataException("File update melebihi batas ukuran 200 MB.");
+                        output.Write(buffer, 0, count);
+                    }
+                }
+
+                string actualDigest;
+                using (SHA256 sha = SHA256.Create())
+                using (FileStream input = File.OpenRead(zipPath))
+                    actualDigest = "sha256:" + BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "").ToLowerInvariant();
+                if (!actualDigest.Equals(expectedDigest, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Verifikasi SHA-256 ZIP update gagal.");
+
+                string updaterPath = Path.Combine(updateDir, "WinIsleUpdater.ps1");
+                using (FileStream input = File.OpenRead(zipPath))
+                using (ZipArchive archive = new ZipArchive(input, ZipArchiveMode.Read))
+                {
+                    ZipArchiveEntry updater = archive.GetEntry("WinIsleUpdater.ps1");
+                    if (updater == null || updater.Length <= 0 || updater.Length > 256 * 1024)
+                        throw new InvalidDataException("WinIsleUpdater.ps1 tidak ada di dalam ZIP atau ukurannya tidak valid.");
+                    using (Stream source = updater.Open())
+                    using (FileStream target = new FileStream(updaterPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                        source.CopyTo(target);
+                }
+
+                string args = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + updaterPath +
+                    "\" -ZipPath \"" + zipPath + "\" -InstallDirectory \"" + AppDomain.CurrentDomain.BaseDirectory +
+                    "\" -ParentPid " + System.Diagnostics.Process.GetCurrentProcess().Id;
+                System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("powershell.exe", args);
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = true;
+                System.Diagnostics.Process.Start(psi);
+
+                Dispatcher.BeginInvoke(new Action(delegate { ExitApp(); }));
+            }
+            catch (Exception ex)
+            {
+                Prog.Log("Pemasangan update gagal: " + ex);
+                if (updateDir != null)
+                {
+                    try { Directory.Delete(updateDir, true); } catch (Exception cleanupError) { Prog.Log(cleanupError.ToString()); }
+                }
+                Dispatcher.BeginInvoke(new Action(delegate
+                {
+                    MessageBox.Show("Update tidak dapat dipasang. WinIsle tidak diubah.\n\n" + ex.Message,
+                        "Pembaruan WinIsle", MessageBoxButton.OK, MessageBoxImage.Error);
+                }));
             }
         });
     }

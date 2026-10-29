@@ -50,7 +50,6 @@ File di dalam folder `UI` dan `Features` melengkapi kelas window utama yang sama
 
 - Hanya untuk Windows; beberapa fitur memakai API Windows (Core Audio, clipboard, registry).
 - Lirik dicari dari LRCLIB (tersinkron), lalu NetEase (tersinkron), kemudian lirik polos LRCLIB.
-- Glow dapat diaktifkan dari tab Kontrol; saat mati, bentuk dan kontur island tetap sama. Pilihan disimpan di registry pengguna Windows.
 - Jika autostart diaktifkan, entri disimpan di registry pengguna (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
 - Jika ada error saat berjalan, catatannya ditulis ke `error.log` di folder aplikasi.
 
