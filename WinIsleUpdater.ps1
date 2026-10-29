@@ -11,8 +11,8 @@ Add-Type -AssemblyName System.Windows.Forms
 $stage = Join-Path $env:TEMP ("WinIsle-update-" + [guid]::NewGuid().ToString("N"))
 $backup = Join-Path $stage "backup"
 $payload = Join-Path $stage "payload"
-$names = @("WinIsle.exe", "media.ps1", "kana.ps1", "README.md", "LICENSE")
-$required = @("WinIsle.exe", "media.ps1", "kana.ps1")
+$names = @("WinIsle.exe", "media.ps1", "kana.ps1", "README.md", "LICENSE", "WinIsleUpdater.ps1")
+$required = @("WinIsle.exe", "media.ps1", "kana.ps1", "WinIsleUpdater.ps1")
 $replaced = New-Object System.Collections.Generic.List[string]
 
 try {

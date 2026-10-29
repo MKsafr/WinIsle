@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 partial class Island
 {
     // ---------- LRCLIB ----------
+    static readonly System.Threading.SemaphoreSlim LrclibRequestSlots = new System.Threading.SemaphoreSlim(3);
     static string E(string s) { return Uri.EscapeDataString(s); }
     static string Norm(string s) { return Regex.Replace((s ?? "").ToLowerInvariant(), @"[^\p{L}\p{N}]+", ""); }
 
@@ -66,22 +67,28 @@ partial class Island
     static string Http(string url, out bool failed, string ua, string referer)
     {
         failed = false;
+        bool lrclib = url.StartsWith("https://lrclib.net/", StringComparison.OrdinalIgnoreCase);
+        if (lrclib) LrclibRequestSlots.Wait();
         try
         {
-            HttpWebRequest rq = (HttpWebRequest)WebRequest.Create(url);
-            rq.UserAgent = ua; rq.Timeout = 8000; rq.ReadWriteTimeout = 8000;
-            if (referer != null) rq.Referer = referer;
-            using (HttpWebResponse rs = (HttpWebResponse)rq.GetResponse())
-            using (StreamReader sr = new StreamReader(rs.GetResponseStream(), Encoding.UTF8))
-                return sr.ReadToEnd();
+            try
+            {
+                HttpWebRequest rq = (HttpWebRequest)WebRequest.Create(url);
+                rq.UserAgent = ua; rq.Timeout = 8000; rq.ReadWriteTimeout = 8000;
+                if (referer != null) rq.Referer = referer;
+                using (HttpWebResponse rs = (HttpWebResponse)rq.GetResponse())
+                using (StreamReader sr = new StreamReader(rs.GetResponseStream(), Encoding.UTF8))
+                    return sr.ReadToEnd();
+            }
+            catch (WebException ex)
+            {
+                HttpWebResponse hr = ex.Response as HttpWebResponse;
+                if (hr != null && (int)hr.StatusCode >= 400 && (int)hr.StatusCode < 500) return null; // mis. 404 = tidak ada
+                failed = true; return null;
+            }
+            catch { failed = true; return null; }
         }
-        catch (WebException ex)
-        {
-            HttpWebResponse hr = ex.Response as HttpWebResponse;
-            if (hr != null && (int)hr.StatusCode >= 400 && (int)hr.StatusCode < 500) return null; // mis. 404 = tidak ada
-            failed = true; return null;
-        }
-        catch { failed = true; return null; }
+        finally { if (lrclib) LrclibRequestSlots.Release(); }
     }
 
     static LRes ToRes(Dictionary<string, object> d)
@@ -319,69 +326,99 @@ partial class Island
 
     static LRes FetchLrclib(string title, string artist, string album, double dur)
     {
+        const int maxConcurrentQueries = 3;
+        bool preferSpecificTitle = Norm(title) != Norm(CleanTitle(title));
+        List<LQuery> queries = LyricQueries(title, artist);
+        ServicePoint lrclibEndpoint = ServicePointManager.FindServicePoint(new Uri("https://lrclib.net/"));
+        if (lrclibEndpoint.ConnectionLimit < maxConcurrentQueries)
+            lrclibEndpoint.ConnectionLimit = maxConcurrentQueries;
+        LRes[] results = new LRes[queries.Count];
+        int[] failures = new int[queries.Count], successes = new int[queries.Count];
+        System.Threading.Tasks.Parallel.For(0, queries.Count,
+            new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = maxConcurrentQueries },
+            delegate(int i)
+            {
+                int failed, succeeded;
+                results[i] = FetchLrclibQuery(queries[i], title, album, dur, preferSpecificTitle, out failed, out succeeded);
+                failures[i] = failed;
+                successes[i] = succeeded;
+            });
+
+        int fails = 0, oks = 0;
+        LRes bestResult = null;
+        for (int i = 0; i < queries.Count; i++)
+        {
+            fails += failures[i];
+            oks += successes[i];
+            if (BetterResult(results[i], bestResult)) bestResult = results[i];
+        }
+        if (fails > 0 && oks == 0) return new LRes { err = true };
+        return bestResult;
+    }
+
+    static LRes FetchLrclibQuery(LQuery query, string title, string album, double dur, bool preferSpecificTitle, out int fails, out int oks)
+    {
         System.Web.Script.Serialization.JavaScriptSerializer ser = new System.Web.Script.Serialization.JavaScriptSerializer();
         ser.MaxJsonLength = int.MaxValue;
         const string api = "https://lrclib.net/api/";
-        int fails = 0, oks = 0; bool f;
+        fails = 0;
+        oks = 0;
+        bool f;
         LRes bestResult = null;
-        bool preferSpecificTitle = Norm(title) != Norm(CleanTitle(title));
-        List<LQuery> queries = LyricQueries(title, artist);
-        foreach (LQuery query in queries)
-        {
-            if (query.artist.Length > 0 && !preferSpecificTitle)
-            {
-                string u = api + "get?track_name=" + E(query.title) + "&artist_name=" + E(query.artist);
-                if (album.Length > 0) u += "&album_name=" + E(album);
-                if (dur > 0) u += "&duration=" + ((int)Math.Round(dur)).ToString(IC);
-                string js = Http(u, out f);
-                if (f) fails++; else oks++;
-                if (js != null)
-                {
-                    try
-                    {
-                        Dictionary<string, object> data = ser.DeserializeObject(js) as Dictionary<string, object>;
-                        string resultTrack = data == null ? "" : Str(data, "trackName");
-                        if (resultTrack.Length == 0 && data != null) resultTrack = Str(data, "name");
-                        string resultArtist = data == null ? "" : Str(data, "artistName");
-                        if (data != null && TrackMatches(resultTrack, query.title, query.artist) &&
-                            (ArtistMatches(resultArtist, query.artist) || ArtistMatches(resultTrack, query.artist)))
-                        {
-                            LRes r = ToRes(data);
-                            double resultDuration = 0;
-                            double.TryParse(Str(data, "duration"), NumberStyles.Float, IC, out resultDuration);
-                            if (!(dur > 0 && resultDuration > 0 && Math.Abs(resultDuration - dur) > 45))
-                            {
-                                r.score = ResultScore(resultTrack, resultArtist, resultDuration, dur, title);
-                                if (Has(r) && BetterResult(r, bestResult)) bestResult = r;
-                            }
-                        }
-                    }
-                    catch { }
-                }
-            }
 
-            List<string> qs = new List<string>();
-            if (query.artist.Length > 0)
+        if (query.artist.Length > 0 && !preferSpecificTitle)
+        {
+            string u = api + "get?track_name=" + E(query.title) + "&artist_name=" + E(query.artist);
+            if (album.Length > 0) u += "&album_name=" + E(album);
+            if (dur > 0) u += "&duration=" + ((int)Math.Round(dur)).ToString(IC);
+            string js = Http(u, out f);
+            if (f) fails++; else oks++;
+            if (js != null)
             {
-                qs.Add("track_name=" + E(query.title) + "&artist_name=" + E(query.artist));
-                qs.Add("q=" + E(query.title + " " + query.artist));
-            }
-            qs.Add("q=" + E(query.title));
-            foreach (string q in qs)
-            {
-                string js = Http(api + "search?" + q, out f);
-                if (f) { fails++; continue; }
-                oks++;
-                if (js == null) continue;
                 try
                 {
-                    LRes best = Pick(ser.DeserializeObject(js), dur, query.title, query.artist, title);
-                    if (BetterResult(best, bestResult)) bestResult = best;
+                    Dictionary<string, object> data = ser.DeserializeObject(js) as Dictionary<string, object>;
+                    string resultTrack = data == null ? "" : Str(data, "trackName");
+                    if (resultTrack.Length == 0 && data != null) resultTrack = Str(data, "name");
+                    string resultArtist = data == null ? "" : Str(data, "artistName");
+                    if (data != null && TrackMatches(resultTrack, query.title, query.artist) &&
+                        (ArtistMatches(resultArtist, query.artist) || ArtistMatches(resultTrack, query.artist)))
+                    {
+                        LRes r = ToRes(data);
+                        double resultDuration = 0;
+                        double.TryParse(Str(data, "duration"), NumberStyles.Float, IC, out resultDuration);
+                        if (!(dur > 0 && resultDuration > 0 && Math.Abs(resultDuration - dur) > 45))
+                        {
+                            r.score = ResultScore(resultTrack, resultArtist, resultDuration, dur, title);
+                            if (Has(r) && BetterResult(r, bestResult)) bestResult = r;
+                        }
+                    }
                 }
                 catch { }
             }
         }
-        if (fails > 0 && oks == 0) return new LRes { err = true };
+
+        List<string> qs = new List<string>();
+        if (query.artist.Length > 0)
+        {
+            qs.Add("track_name=" + E(query.title) + "&artist_name=" + E(query.artist));
+            qs.Add("q=" + E(query.title + " " + query.artist));
+        }
+        qs.Add("q=" + E(query.title));
+        foreach (string q in qs)
+        {
+            string js = Http(api + "search?" + q, out f);
+            if (f) { fails++; continue; }
+            oks++;
+            if (js == null) continue;
+            try
+            {
+                LRes best = Pick(ser.DeserializeObject(js), dur, query.title, query.artist, title);
+                if (BetterResult(best, bestResult)) bestResult = best;
+            }
+            catch { }
+        }
+
         return bestResult;
     }
 
