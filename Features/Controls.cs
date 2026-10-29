@@ -17,6 +17,50 @@ partial class Island
         btnAwake.Background = awake ? Accent : Rgb(38, 38, 38);
     }
 
+    bool LoadGlowSetting()
+    {
+        try
+        {
+            using (Win32.RegistryKey key = Win32.Registry.CurrentUser.OpenSubKey(@"Software\WinIsle"))
+                return key != null && Convert.ToInt32(key.GetValue("GlowEnabled", 0)) != 0;
+        }
+        catch (Exception ex)
+        {
+            Prog.Log(ex.ToString());
+            return false;
+        }
+    }
+
+    void ToggleGlow()
+    {
+        bool enabled = !glowEnabled;
+        try
+        {
+            using (Win32.RegistryKey key = Win32.Registry.CurrentUser.CreateSubKey(@"Software\WinIsle"))
+            {
+                if (key == null) throw new InvalidOperationException("Tidak dapat membuka pengaturan WinIsle di registry.");
+                key.SetValue("GlowEnabled", enabled ? 1 : 0, Win32.RegistryValueKind.DWord);
+            }
+        }
+        catch (Exception ex)
+        {
+            Prog.Log(ex.ToString());
+            MessageBox.Show("Pengaturan glow tidak dapat disimpan:\n" + ex.Message, "WinIsle", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        glowEnabled = enabled;
+        if (bodyShape != null) bodyShape.Effect = enabled ? glowEffect : null;
+        RefreshGlowBtn();
+    }
+
+    void RefreshGlowBtn()
+    {
+        if (btnGlow == null) return;
+        btnGlow.Content = "Glow: " + (glowEnabled ? "nyala" : "mati");
+        btnGlow.Background = glowEnabled ? Accent : Rgb(38, 38, 38);
+    }
+
     bool AutoStartOn()
     {
         try

@@ -35,8 +35,7 @@ partial class Island
         if (o == open) return;
         open = o; outSince = DateTime.MinValue;
         isl.CornerRadius = new CornerRadius(o ? 22 : 12, 0, 0, o ? 22 : 12);
-        if (glowBody != null) glowBody.CornerRadius = isl.CornerRadius;
-        UpdateGlowContour();
+        UpdateBodyShape();
         CubicEase ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         TimeSpan du = TimeSpan.FromMilliseconds(240);
         isl.BeginAnimation(WidthProperty, new DoubleAnimation(o ? OW : CW, du) { EasingFunction = ease });

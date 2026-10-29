@@ -69,9 +69,9 @@ partial class Island : Window
     Border isl, seekFill, titleHost;
     Canvas titleCanvas;
     Grid miniRoot, expRoot, seekBar, shell;
-    Canvas glowCanvas;
-    Border glowBody;
-    System.Windows.Shapes.Path topLobe, bottomLobe;
+    Canvas bodyCanvas;
+    System.Windows.Shapes.Path bodyShape;
+    System.Windows.Media.Effects.DropShadowEffect glowEffect;
     UniformGrid calGrid;
     UIElement[] pages = new UIElement[8];
     Border[] dots = new Border[8];
@@ -83,7 +83,7 @@ partial class Island : Window
     TextAlignment popAlignmentSelection = TextAlignment.Center;
     bool popSettingsEditing;
     TextBlock popSettingsStatus;
-    Button btnPlay, btnAwake, btnAuto, calTitleBtn, btnLyricRefresh, btnLyricSettings;
+    Button btnPlay, btnAwake, btnAuto, btnGlow, calTitleBtn, btnLyricRefresh, btnLyricSettings;
     TextBlock clockFull, tabTitle, topClock, botClock, titleText;
     TextBlock tTitle, tArtist, tPos, tDur, lStat, lOff, lPlainT, lHint, tCpu, tRam, tDisk, tBat;
     TextBlock[] ly = new TextBlock[5];
@@ -98,7 +98,7 @@ partial class Island : Window
     Dictionary<string, LRes> cache = new Dictionary<string, LRes>();
     string lkey = "";
     string curTi = "", curAlbum = "";
-    bool lsynced, playingNow, open, back, awake, isDragging, quitting, clipDirty = true, lyricConnectionError;
+    bool lsynced, playingNow, open, back, awake, glowEnabled, isDragging, quitting, clipDirty = true, lyricConnectionError;
     double basePos = -1, offset, curDur, dragRatio, cpuPct, collH = CH, wheelAcc;
     string titleShown = "";
     bool titleOn;
@@ -149,39 +149,46 @@ partial class Island : Window
 
     static SolidColorBrush Rgb(byte r, byte g, byte b) { return new SolidColorBrush(Color.FromRgb(r, g, b)); }
 
-    void UpdateGlowContour()
+    void UpdateBodyShape()
     {
         if (isl == null || isl.ActualWidth <= 0 || isl.ActualHeight <= 0) return;
         double w = isl.ActualWidth, h = isl.ActualHeight;
         Point p = isl.TransformToAncestor(shell).Transform(new Point(0, 0));
-        if (glowCanvas == null || glowBody == null || topLobe == null || bottomLobe == null) return;
+        if (bodyShape == null) return;
 
         const double extW = 28, extH = 14;
-        string ew = extW.ToString("0.###", IC);
-        string c1 = (extW * 0.4).ToString("0.###", IC);
-        string c2 = (extW * 0.85).ToString("0.###", IC);
-
-        if (topLobe.Data == null)
+        double r = isl.CornerRadius.TopLeft;
+        const double k = 0.55228475;
+        StreamGeometry geometry = new StreamGeometry();
+        using (StreamGeometryContext ctx = geometry.Open())
         {
-            Geometry top = Geometry.Parse("M 0," + extH.ToString("0.###", IC) + " C " + c1 + "," + extH.ToString("0.###", IC) + " " +
-                c2 + "," + (extH * 0.95).ToString("0.###", IC) + " " + ew + ",0 L " + ew + "," + extH.ToString("0.###", IC) + " Z");
-            Geometry bottom = Geometry.Parse("M 0,0 C " + c1 + ",0 " + c2 + "," +
-                (extH * 0.05).ToString("0.###", IC) + " " + ew + "," + extH.ToString("0.###", IC) +
-                " L " + ew + ",0 Z");
-            top.Freeze(); bottom.Freeze();
-            topLobe.Data = top;
-            bottomLobe.Data = bottom;
+            ctx.BeginFigure(new Point(w, 0), true, true);
+            ctx.BezierTo(
+                new Point(w - extW + extW * 0.85, extH * 0.95),
+                new Point(w - extW + extW * 0.4, extH),
+                new Point(w - extW, extH), true, false);
+            ctx.LineTo(new Point(r, extH), true, false);
+            ctx.BezierTo(
+                new Point(r - r * k, extH),
+                new Point(0, extH + r - r * k),
+                new Point(0, extH + r), true, false);
+            ctx.LineTo(new Point(0, extH + h - r), true, false);
+            ctx.BezierTo(
+                new Point(0, extH + h - r + r * k),
+                new Point(r - r * k, extH + h),
+                new Point(r, extH + h), true, false);
+            ctx.LineTo(new Point(w - extW, extH + h), true, false);
+            ctx.BezierTo(
+                new Point(w - extW + extW * 0.4, extH + h),
+                new Point(w - extW + extW * 0.85, extH + h + extH * 0.05),
+                new Point(w, extH + h + extH), true, false);
+            ctx.LineTo(new Point(w, extH + h), true, false);
+            ctx.LineTo(new Point(w, extH), true, false);
         }
-        glowBody.Width = w;
-        glowBody.Height = h;
-        topLobe.Width = bottomLobe.Width = extW;
-        topLobe.Height = bottomLobe.Height = extH;
-        Canvas.SetLeft(glowBody, p.X);
-        Canvas.SetTop(glowBody, p.Y);
-        Canvas.SetLeft(topLobe, p.X + w - extW);
-        Canvas.SetTop(topLobe, p.Y - extH);
-        Canvas.SetLeft(bottomLobe, p.X + w - extW);
-        Canvas.SetTop(bottomLobe, p.Y + h);
+        geometry.Freeze();
+        bodyShape.Data = geometry;
+        Canvas.SetLeft(bodyShape, p.X);
+        Canvas.SetTop(bodyShape, p.Y - extH);
     }
 
     static TextBlock T(string s, double op, double sz)
@@ -250,6 +257,7 @@ partial class Island : Window
         calY = DateTime.Today.Year; calM = DateTime.Today.Month;
 
         AutoStartInit();
+        glowEnabled = LoadGlowSetting();
         BuildMini();
         BuildPages();
         BuildExpanded();
@@ -257,41 +265,30 @@ partial class Island : Window
         Grid root = new Grid();
         root.Children.Add(miniRoot);
         root.Children.Add(expRoot);
-        glowCanvas = new Canvas { IsHitTestVisible = false };
-        System.Windows.Media.Effects.DropShadowEffect glow = new System.Windows.Media.Effects.DropShadowEffect
+        glowEffect = new System.Windows.Media.Effects.DropShadowEffect
         {
             Color = Colors.White, BlurRadius = 12, ShadowDepth = 0, Opacity = 0.35
         };
-        glowCanvas.Effect = glow;
-        glowBody = new Border
+        bodyCanvas = new Canvas { IsHitTestVisible = false };
+        bodyShape = new System.Windows.Shapes.Path
         {
-            Background = Brushes.Black, CornerRadius = new CornerRadius(12, 0, 0, 12), IsHitTestVisible = false
+            Fill = Brushes.Black, Effect = glowEnabled ? glowEffect : null, IsHitTestVisible = false
         };
-        topLobe = new System.Windows.Shapes.Path
-        {
-            Fill = Brushes.Black, Stretch = Stretch.Fill, IsHitTestVisible = false
-        };
-        bottomLobe = new System.Windows.Shapes.Path
-        {
-            Fill = Brushes.Black, Stretch = Stretch.Fill, IsHitTestVisible = false
-        };
-        glowCanvas.Children.Add(glowBody);
-        glowCanvas.Children.Add(topLobe);
-        glowCanvas.Children.Add(bottomLobe);
+        bodyCanvas.Children.Add(bodyShape);
         isl = new Border
         {
-            Background = Brushes.Black, CornerRadius = new CornerRadius(12, 0, 0, 12), Margin = new Thickness(12, 12, 0, 12),
+            Background = Brushes.Transparent, CornerRadius = new CornerRadius(12, 0, 0, 12), Margin = new Thickness(12, 12, 0, 12),
             Width = CW, Height = CH,
             HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, ClipToBounds = true,
             Child = root
         };
         shell = new Grid();
-        shell.Children.Add(glowCanvas);
+        shell.Children.Add(bodyCanvas);
         shell.Children.Add(isl);
         Content = shell;
-        isl.SizeChanged += delegate(object s, SizeChangedEventArgs e) { UpdateGlowContour(); };
-        SizeChanged += delegate { UpdateGlowContour(); };
-        UpdateGlowContour();
+        isl.SizeChanged += delegate(object s, SizeChangedEventArgs e) { UpdateBodyShape(); };
+        SizeChanged += delegate { UpdateBodyShape(); };
+        UpdateBodyShape();
         isl.PreviewMouseWheel += Wheel;
         isl.PreviewMouseDown += delegate { if (editing && !tTimer.IsMouseOver) EndEdit(true); };
         Deactivated += delegate { if (editing) EndEdit(false); };

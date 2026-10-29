@@ -178,5 +178,23 @@ partial class Island
         catch { }
     }
 
+    void SkipTrack(bool next)
+    {
+        if (!File.Exists(ScriptPath()))
+        {
+            Prog.Log("media.ps1 tidak ditemukan; tidak dapat mengubah track.");
+            return;
+        }
+        try
+        {
+            string action = next ? "-SkipNext" : "-SkipPrevious";
+            ProcessStartInfo psi = new ProcessStartInfo("powershell.exe",
+                "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + ScriptPath() + "\" " + action);
+            psi.CreateNoWindow = true; psi.UseShellExecute = false;
+            Process.Start(psi);
+        }
+        catch (Exception ex) { Prog.Log(ex.ToString()); }
+    }
+
 
 }

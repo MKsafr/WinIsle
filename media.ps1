@@ -4,7 +4,8 @@
 #                   Berhenti sendiri kalau proses WinIsle (-ParentPid) sudah tidak ada.
 # Mode 2 (-SeekTo detik): pindahkan posisi lagu lalu keluar.
 # Mode 3 (-PauseAll): jeda semua sesi media yang sedang Playing (dipakai saat alarm timer), lalu keluar.
-param([double]$SeekTo = -1, [int]$ParentPid = 0, [switch]$PauseAll)
+# Mode 4 (-SkipNext / -SkipPrevious): pindah track sesi media aktif lalu keluar.
+param([double]$SeekTo = -1, [int]$ParentPid = 0, [switch]$PauseAll, [switch]$SkipNext, [switch]$SkipPrevious)
 
 $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
@@ -25,6 +26,19 @@ function Await($op, $type) {
 }
 
 $mgr = Await ($MgrType::RequestAsync()) $MgrType
+
+# ---------- Mode pindah track ----------
+if ($SkipNext -or $SkipPrevious) {
+    $s = $mgr.GetCurrentSession()
+    if ($s) {
+        if ($SkipNext) {
+            Await ($s.TrySkipNextAsync()) ([bool]) | Out-Null
+        } else {
+            Await ($s.TrySkipPreviousAsync()) ([bool]) | Out-Null
+        }
+    }
+    exit
+}
 
 # ---------- Mode seek ----------
 if ($SeekTo -ge 0) {

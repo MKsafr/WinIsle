@@ -127,7 +127,7 @@ partial class Island
         Grid timeGrid = new Grid(); timeGrid.Children.Add(tPos); timeGrid.Children.Add(tDur);
         btnPlay = SB("\u25B6", delegate { PressKey(0xB3); playingNow = !playingNow; btnPlay.Content = playingNow ? "\u23F8" : "\u25B6"; baseAt = DateTime.Now; });
         btnPlay.Padding = new Thickness(16, 3, 16, 3);
-        StackPanel ctrl = Row(SB("\u23EE", delegate { PressKey(0xB1); }), btnPlay, SB("\u23ED", delegate { PressKey(0xB0); }));
+        StackPanel ctrl = Row(SB("\u23EE", delegate { SkipTrack(false); }), btnPlay, SB("\u23ED", delegate { SkipTrack(true); }));
         ctrl.HorizontalAlignment = HorizontalAlignment.Center; ctrl.Margin = new Thickness(0, 10, 0, 0);
         pages[0] = Col(tTitle, tArtist, seekBar, timeGrid, ctrl);
         ((StackPanel)pages[0]).Margin = new Thickness(0, 12, 0, 0);
@@ -253,6 +253,8 @@ partial class Island
         // 7: Kontrol
         btnAwake = SB("\u2615 Keep awake: mati", delegate { ToggleAwake(); });
         btnAuto = SB("", delegate { ToggleAutostart(); });
+        btnGlow = SB("", delegate { ToggleGlow(); });
+        RefreshGlowBtn();
         RefreshAutoBtn();
 
         StackPanel volRow = Row(SB("\U0001F509 \u2212", delegate { PressKey(0xAE); }), SB("\U0001F507", delegate { PressKey(0xAD); }), SB("\U0001F50A +", delegate { PressKey(0xAF); }));
@@ -262,6 +264,7 @@ partial class Island
             SB("\U0001F512 Kunci layar", delegate { LockWorkStation(); }),
             SB("\u2B07 Ke belakang", delegate { ToggleBack(); }),
             btnAuto,
+            btnGlow,
             volRow,
             SB("\u2716 Keluar", delegate { ExitApp(); }));
         ctl.Margin = new Thickness(0, 2, 0, 0);
