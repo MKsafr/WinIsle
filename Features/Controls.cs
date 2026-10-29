@@ -102,7 +102,7 @@ partial class Island
 
                 string assetName = "WinIsle-" + tag + ".zip";
                 string downloadUrl = null, digest = null;
-                IList<object> assets = assetsValue as IList<object>;
+                System.Collections.IList assets = assetsValue as System.Collections.IList;
                 if (assets == null) throw new InvalidDataException("Daftar aset release tidak valid.");
                 foreach (object value in assets)
                 {
