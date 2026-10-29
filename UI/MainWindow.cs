@@ -317,6 +317,7 @@ partial class Island : Window
         UpdateTabs();
         RefreshClock();
         StartMedia();
+        CheckForUpdates();
     }
 
     void Reposition()

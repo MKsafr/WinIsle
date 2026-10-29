@@ -1,4 +1,7 @@
-﻿using System;
+﻿using System.Net;
+using System.Text;
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -61,6 +64,61 @@ partial class Island
         btnGlow.Background = glowEnabled ? Accent : Rgb(38, 38, 38);
     }
 
+    void CheckForUpdates()
+    {
+        System.Threading.ThreadPool.QueueUserWorkItem(delegate
+        {
+            try
+            {
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(
+                    "https://api.github.com/repos/MKsafr/WinIsle/releases/latest");
+                request.UserAgent = "WinIsle";
+                request.Timeout = 8000;
+                request.ReadWriteTimeout = 8000;
+
+                string json;
+                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                using (StreamReader reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
+                    json = reader.ReadToEnd();
+
+                Dictionary<string, object> release =
+                    new System.Web.Script.Serialization.JavaScriptSerializer()
+                        .Deserialize<Dictionary<string, object>>(json);
+
+                object tagValue, urlValue;
+                if (release == null ||
+                    !release.TryGetValue("tag_name", out tagValue) ||
+                    !release.TryGetValue("html_url", out urlValue))
+                    return;
+
+                string tag = Convert.ToString(tagValue);
+                string releaseUrl = Convert.ToString(urlValue);
+                Version latest, current = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+
+                if (!Version.TryParse(tag.TrimStart('v', 'V'), out latest) ||
+                    latest.CompareTo(current) <= 0 ||
+                    string.IsNullOrWhiteSpace(releaseUrl))
+                    return;
+
+                Dispatcher.BeginInvoke(new Action(delegate
+                {
+                    MessageBoxResult result = MessageBox.Show(
+                        "Versi baru " + tag + " tersedia. Buka halaman unduhan?",
+                        "Pembaruan WinIsle",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Information);
+
+                    if (result == MessageBoxResult.Yes)
+                        System.Diagnostics.Process.Start(releaseUrl);
+                }));
+            }
+            catch (Exception ex)
+            {
+                Prog.Log("Pemeriksaan update gagal: " + ex);
+            }
+        });
+    }
+    
     bool AutoStartOn()
     {
         try
