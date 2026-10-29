@@ -31,7 +31,7 @@ partial class Island
         pages[0].Visibility = Visibility.Visible;
 
         // Titik penunjuk posisi fitur (klik titik untuk loncat ke fitur itu)
-        StackPanel dotsPanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(6, 0, 0, 0) };
+        pageDotsPanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(6, 0, 0, 0) };
         for (int i = 0; i < 8; i++)
         {
             int idx = i;
@@ -40,7 +40,7 @@ partial class Island
             Grid hit = new Grid { Width = 14, Height = 13, Background = Brushes.Transparent, Cursor = Cursors.Hand, ToolTip = tabNames[i] };
             hit.Children.Add(dot);
             hit.MouseLeftButtonDown += delegate { SwitchTo(idx); };
-            dotsPanel.Children.Add(hit);
+            pageDotsPanel.Children.Add(hit);
         }
 
         expRoot = new Grid { Width = OW, Height = OH, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed, Opacity = 0 };
@@ -49,8 +49,8 @@ partial class Island
         expRoot.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         expRoot.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetRow(up, 0); Grid.SetRow(header, 1); Grid.SetRow(host, 2); Grid.SetRow(down, 3);
-        Grid.SetRow(dotsPanel, 1); Grid.SetRowSpan(dotsPanel, 2);
-        expRoot.Children.Add(up); expRoot.Children.Add(header); expRoot.Children.Add(host); expRoot.Children.Add(down); expRoot.Children.Add(dotsPanel);
+        Grid.SetRow(pageDotsPanel, 1); Grid.SetRowSpan(pageDotsPanel, 2);
+        expRoot.Children.Add(up); expRoot.Children.Add(header); expRoot.Children.Add(host); expRoot.Children.Add(down); expRoot.Children.Add(pageDotsPanel);
     }
 
     void Tick(int ms, Action a)

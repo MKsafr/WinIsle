@@ -79,7 +79,13 @@ partial class Island
         ReleaseEdit();
     }
 
-    void StartTimer(int minutes) { StartSec(minutes * 60.0); }
+    void SelectTimer(int minutes)
+    {
+        if (!CanEdit()) return;
+        dig = (minutes * 100).ToString();
+        ShowIdle();
+        SetPauseBtn();
+    }
 
     // Mulai (dari angka yang diketik) / Jeda / Lanjut
     void StartPause()

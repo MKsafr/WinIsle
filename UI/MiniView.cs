@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 
 partial class Island
 {
@@ -143,22 +145,33 @@ partial class Island
         lStat.TextWrapping = TextWrapping.Wrap; lStat.TextAlignment = TextAlignment.Center; lStat.TextTrimming = TextTrimming.None;
         lPlainT = T("", 0.85, 11.5); lPlainT.TextWrapping = TextWrapping.Wrap; lPlainT.TextAlignment = TextAlignment.Center; lPlainT.TextTrimming = TextTrimming.None;
         lPlain = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, Content = lPlainT, Visibility = Visibility.Collapsed };
-        btnLyricRefresh = SB("\u21BB", delegate { RetryLyrics(); });
+        btnLyricRefresh = SB("\u21BB Refresh", delegate { RetryLyrics(); });
         btnLyricRefresh.ToolTip = "Coba hubungkan kembali ke LRCLIB";
         btnLyricRefresh.IsEnabled = false;
         btnLyricRefresh.Focusable = false;
-        Grid lyricHeader = new Grid { Height = 28 };
-        btnLyricRefresh.HorizontalAlignment = HorizontalAlignment.Right;
-        lyricHeader.Children.Add(btnLyricRefresh);
-        Grid lyricArea = new Grid { Height = 126, ClipToBounds = true };
+        btnLyricRefresh.FontSize = 10;
+        btnLyricRefresh.Padding = new Thickness(5, 2, 5, 2);
+        btnLyricSettings = SB("\u2699 Pengaturan", delegate { TogglePopSettings(); });
+        btnLyricSettings.ToolTip = "Atur font, lebar, dan perataan pop-out lirik";
+        btnLyricSettings.Focusable = false;
+        btnLyricSettings.FontSize = 10;
+        btnLyricSettings.Padding = new Thickness(5, 2, 5, 2);
+        StackPanel lyricHeader = Row(btnLyricRefresh, btnLyricSettings);
+        lyricHeader.Height = 30;
+        lyricHeader.HorizontalAlignment = HorizontalAlignment.Right;
+        lyricArea = new Grid { Height = 126, ClipToBounds = true };
         lyricArea.Children.Add(lStat); lyricArea.Children.Add(lSync); lyricArea.Children.Add(lPlain);
+        BuildPopSettingsPanel();
         lOff = T("0.0s", 0.7, 11); lOff.VerticalAlignment = VerticalAlignment.Center; lOff.TextAlignment = TextAlignment.Center; lOff.MinWidth = 36;
         btnRom = SB("Aa", delegate { ToggleRom(); }); btnRom.ToolTip = "Lirik latin (romaji / romanisasi)"; btnRom.Visibility = Visibility.Visible;
-        btnPop = SB("\u2750", delegate { TogglePop(); }); btnPop.ToolTip = "Pop out: lirik melayang. Geser untuk memindahkan, klik dua kali untuk mengembalikan";
+        btnPop = SB("\u2750", delegate { TogglePop(); }); btnPop.ToolTip = "Tampilkan atau sembunyikan pop-out lirik";
         StackPanel offRow = Row(btnRom, SB("\u23EA", delegate { SetOffset(offset - 0.5); }), lOff, SB("\u23E9", delegate { SetOffset(offset + 0.5); }), btnPop);
         offRow.HorizontalAlignment = HorizontalAlignment.Center; offRow.Margin = new Thickness(0, 4, 0, 0);
         lHint = T("", 0.4, 9.5); lHint.TextWrapping = TextWrapping.Wrap; lHint.TextAlignment = TextAlignment.Center; lHint.TextTrimming = TextTrimming.None;
-        pages[1] = Col(lyricHeader, lyricArea, offRow, lHint);
+        Grid lyricContent = new Grid();
+        lyricContent.Children.Add(lyricArea);
+        lyricContent.Children.Add(lyricSettingsPanel);
+        pages[1] = Col(lyricHeader, lyricContent, offRow, lHint);
 
         // 4: Kalender
         calGrid = new UniformGrid { Columns = 7, Rows = 7, Height = 122 };
@@ -202,11 +215,11 @@ partial class Island
             else if (plain && kk >= Key.NumPad0 && kk <= Key.NumPad9) AddDigit(kk - Key.NumPad0);
             else if (kk == Key.Back) { if (dig.Length > 0) { dig = dig.Substring(0, dig.Length - 1); ShowIdle(); } }
             else if (kk == Key.Delete) { dig = ""; ShowIdle(); }
-            else if (kk == Key.Enter) StartPause();
+            else if (kk == Key.Enter) ReleaseEdit();
             else if (kk == Key.Escape) ReleaseEdit();
             else if (!IsMod(kk)) EndEdit(true);
         };
-        StackPanel presets = Row(SB("5m", delegate { StartTimer(5); }), SB("10m", delegate { StartTimer(10); }), SB("15m", delegate { StartTimer(15); }), SB("25m", delegate { StartTimer(25); }));
+        StackPanel presets = Row(SB("5m", delegate { SelectTimer(5); }), SB("10m", delegate { SelectTimer(10); }), SB("15m", delegate { SelectTimer(15); }), SB("25m", delegate { SelectTimer(25); }));
         presets.HorizontalAlignment = HorizontalAlignment.Center;
         btnPause = SB("\u25B6", delegate { StartPause(); }); btnPause.ToolTip = "Mulai timer";
         btnPause.FontSize = 22; btnPause.Padding = new Thickness(18, 8, 18, 8); btnPause.MinWidth = 62; btnPause.MinHeight = 48;
@@ -241,6 +254,7 @@ partial class Island
         btnAwake = SB("\u2615 Keep awake: mati", delegate { ToggleAwake(); });
         btnAuto = SB("", delegate { ToggleAutostart(); });
         RefreshAutoBtn();
+
         StackPanel volRow = Row(SB("\U0001F509 \u2212", delegate { PressKey(0xAE); }), SB("\U0001F507", delegate { PressKey(0xAD); }), SB("\U0001F50A +", delegate { PressKey(0xAF); }));
         volRow.HorizontalAlignment = HorizontalAlignment.Center;
         StackPanel ctl = Col(
@@ -257,5 +271,230 @@ partial class Island
         pages[3] = BuildMixerPage();
     }
 
+    void BuildPopSettingsPanel()
+    {
+        lyricSettingsPanel = new Grid { Height = 126, Margin = new Thickness(2), Visibility = Visibility.Collapsed };
+        Grid form = new Grid { Margin = new Thickness(6, 4, 6, 3) };
+        form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(58) });
+        form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        for (int i = 0; i < 5; i++)
+            form.RowDefinitions.Add(new RowDefinition { Height = i < 3 ? new GridLength(25) : GridLength.Auto });
+        popFontChoice = PopSettingInput(16, 2);
+        popWidthChoice = PopSettingInput(400, 3);
+        popAlignmentButtons = new Button[3];
+        StackPanel alignmentChoices = Row(
+            PopAlignmentButton(0, "Kiri"),
+            PopAlignmentButton(1, "Tengah"),
+            PopAlignmentButton(2, "Kanan"));
+        alignmentChoices.Width = 124;
+        alignmentChoices.VerticalAlignment = VerticalAlignment.Center;
+        popFontChoice.ToolTip = "Ukuran font pop-out, 10-48";
+        popWidthChoice.ToolTip = "Batas lebar pil termasuk padding, 100-900";
+        AddPopSettingRow(form, 0, "Font", popFontChoice);
+        AddPopSettingRow(form, 1, "Lebar maks.", popWidthChoice);
+        AddPopSettingRow(form, 2, "Perataan", alignmentChoices);
+        StackPanel actions = Row(
+            SB("Simpan", delegate { SavePopSettingsFromWidget(); }),
+            SB("Reset", delegate { ResetPopSettingsFromWidget(); }));
+        actions.HorizontalAlignment = HorizontalAlignment.Center;
+        actions.Margin = new Thickness(0, 3, 0, 0);
+        Grid.SetRow(actions, 3); Grid.SetColumnSpan(actions, 2);
+        form.Children.Add(actions);
+        popSettingsStatus = T("", 0.8, 9);
+        popSettingsStatus.TextAlignment = TextAlignment.Center;
+        popSettingsStatus.HorizontalAlignment = HorizontalAlignment.Center;
+        Grid.SetRow(popSettingsStatus, 4); Grid.SetColumnSpan(popSettingsStatus, 2);
+        form.Children.Add(popSettingsStatus);
+        Border card = new Border
+        {
+            Background = Rgb(20, 20, 20), BorderBrush = Rgb(50, 50, 50), BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10), Child = form
+        };
+        lyricSettingsPanel.Children.Add(card);
+        LoadPopSettingsIntoWidget();
+    }
+
+    TextBox PopSettingInput(double value, int maxLength)
+    {
+        TextBox input = new TextBox
+        {
+            Text = value.ToString("0.##", CultureInfo.InvariantCulture), Height = 22,
+            Margin = new Thickness(0, 1, 0, 1), FontSize = 10,
+            Background = Rgb(38, 38, 38), Foreground = Brushes.White,
+            BorderBrush = Rgb(78, 78, 78), BorderThickness = new Thickness(1),
+            Padding = new Thickness(5, 1, 5, 1),
+            CaretBrush = Brushes.White, VerticalContentAlignment = VerticalAlignment.Center,
+            MaxLength = maxLength
+        };
+        input.ContextMenu = null;
+        input.PreviewTextInput += delegate(object sender, TextCompositionEventArgs e)
+        {
+            e.Handled = !IsPopSettingDigits(e.Text);
+        };
+        DataObject.AddPastingHandler(input, delegate(object sender, DataObjectPastingEventArgs e)
+        {
+            if (!e.SourceDataObject.GetDataPresent(DataFormats.Text, true) ||
+                !IsPopSettingDigits(Convert.ToString(e.SourceDataObject.GetData(DataFormats.Text))))
+                e.CancelCommand();
+        });
+        input.PreviewMouseLeftButtonDown += delegate
+        {
+            if (input.IsKeyboardFocusWithin) return;
+            BeginPopSettingsEdit(input);
+        };
+        input.GotKeyboardFocus += delegate
+        {
+            popSettingsEditing = true;
+            input.BorderBrush = Accent;
+        };
+        input.LostKeyboardFocus += delegate
+        {
+            input.BorderBrush = Rgb(78, 78, 78);
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(EndPopSettingsEditIfNeeded));
+        };
+        return input;
+    }
+
+    static bool IsPopSettingDigits(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        foreach (char c in text) if (c < '0' || c > '9') return false;
+        return true;
+    }
+
+    void BeginPopSettingsEdit(TextBox input)
+    {
+        if (!popSettingsEditing) prevFg = GetForegroundWindow();
+        SetActivatable(true);
+        Activate();
+        input.Focus();
+        input.SelectAll();
+    }
+
+    void EndPopSettingsEditIfNeeded()
+    {
+        if (popFontChoice.IsKeyboardFocusWithin || popWidthChoice.IsKeyboardFocusWithin) return;
+        if (!popSettingsEditing) return;
+        popSettingsEditing = false;
+        SetActivatable(false);
+        if (prevFg != IntPtr.Zero && prevFg != hwnd) SetForegroundWindow(prevFg);
+    }
+
+    Button PopAlignmentButton(int index, string label)
+    {
+        Button button = SB(label, delegate { SelectPopAlignment(index); });
+        button.FontSize = 9;
+        button.Width = 38;
+        button.Padding = new Thickness(2, 2, 2, 2);
+        button.Margin = new Thickness(1, 0, 1, 0);
+        button.HorizontalAlignment = HorizontalAlignment.Stretch;
+        popAlignmentButtons[index] = button;
+        return button;
+    }
+
+    void SelectPopAlignment(int index)
+    {
+        popAlignmentSelection = index == 0 ? TextAlignment.Left :
+            (index == 2 ? TextAlignment.Right : TextAlignment.Center);
+        RefreshPopAlignmentButtons();
+    }
+
+    void RefreshPopAlignmentButtons()
+    {
+        if (popAlignmentButtons == null) return;
+        int selected = popAlignmentSelection == TextAlignment.Left ? 0 :
+            (popAlignmentSelection == TextAlignment.Right ? 2 : 1);
+        for (int i = 0; i < popAlignmentButtons.Length; i++)
+        {
+            popAlignmentButtons[i].Background = i == selected ? Accent : Rgb(38, 38, 38);
+            popAlignmentButtons[i].Opacity = i == selected ? 1 : 0.72;
+        }
+    }
+
+    static void AddPopSettingRow(Grid form, int row, string label, UIElement input)
+    {
+        TextBlock caption = T(label, 0.75, 9.5);
+        caption.VerticalAlignment = VerticalAlignment.Center;
+        caption.Margin = new Thickness(1, 0, 4, 0);
+        Grid.SetRow(caption, row); Grid.SetColumn(caption, 0);
+        Grid.SetRow(input, row); Grid.SetColumn(input, 1);
+        form.Children.Add(caption);
+        form.Children.Add(input);
+    }
+
+    void TogglePopSettings()
+    {
+        if (pop == null) pop = new PopLyric();
+        bool show = lyricSettingsPanel.Visibility != Visibility.Visible;
+        lyricArea.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
+        lyricSettingsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        btnLyricSettings.Content = show ? "\u2699 Tutup" : "\u2699 Pengaturan";
+        if (show) LoadPopSettingsIntoWidget();
+    }
+
+    void LoadPopSettingsIntoWidget()
+    {
+        if (pop == null || popFontChoice == null) return;
+        popFontChoice.Text = pop.FontSizeSetting.ToString("0.##", CultureInfo.InvariantCulture);
+        popWidthChoice.Text = pop.MaxWidthSetting.ToString("0.##", CultureInfo.InvariantCulture);
+        popAlignmentSelection = pop.AlignmentSetting;
+        RefreshPopAlignmentButtons();
+        popSettingsStatus.Text = "";
+    }
+
+    void SavePopSettingsFromWidget()
+    {
+        double newFont, newWidth;
+        string error;
+        if (!TryReadPopSetting(popFontChoice, 10, 48, "Font", out newFont, out error) ||
+            !TryReadPopSetting(popWidthChoice, 100, 900, "Lebar", out newWidth, out error))
+        {
+            popSettingsStatus.Text = error;
+            return;
+        }
+        pop.ApplySettings(newFont, newWidth, popAlignmentSelection);
+        popSettingsStatus.Text = "Pengaturan disimpan.";
+        FinishPopSettingsEdit();
+    }
+
+    void ResetPopSettingsFromWidget()
+    {
+        pop.ResetSettings();
+        LoadPopSettingsIntoWidget();
+        FinishPopSettingsEdit();
+    }
+
+    void FinishPopSettingsEdit()
+    {
+        if (!popSettingsEditing) return;
+        Keyboard.ClearFocus();
+        popSettingsEditing = false;
+        SetActivatable(false);
+        if (prevFg != IntPtr.Zero && prevFg != hwnd) SetForegroundWindow(prevFg);
+    }
+
+    static bool TryReadPopSetting(TextBox input, double min, double max, string label, out double value, out string error)
+    {
+        error = "";
+        int parsed;
+        if (!int.TryParse(input.Text, NumberStyles.None, CultureInfo.InvariantCulture, out parsed))
+        {
+            value = 0;
+            error = label + ": masukkan angka.";
+            return false;
+        }
+        value = parsed;
+        if (value < min)
+        {
+            error = label + " terlalu kecil (minimal " + min.ToString("0", CultureInfo.InvariantCulture) + ").";
+            return false;
+        }
+        if (value > max)
+        {
+            error = label + " terlalu besar (maksimal " + max.ToString("0", CultureInfo.InvariantCulture) + ").";
+            return false;
+        }
+        return true;
+    }
 
 }

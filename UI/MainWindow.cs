@@ -76,7 +76,14 @@ partial class Island : Window
     UIElement[] pages = new UIElement[8];
     Border[] dots = new Border[8];
     ScrollViewer clipScroll;
-    Button btnPlay, btnAwake, btnAuto, calTitleBtn, btnLyricRefresh;
+    StackPanel pageDotsPanel;
+    Grid lyricArea, lyricSettingsPanel;
+    TextBox popFontChoice, popWidthChoice;
+    Button[] popAlignmentButtons;
+    TextAlignment popAlignmentSelection = TextAlignment.Center;
+    bool popSettingsEditing;
+    TextBlock popSettingsStatus;
+    Button btnPlay, btnAwake, btnAuto, calTitleBtn, btnLyricRefresh, btnLyricSettings;
     TextBlock clockFull, tabTitle, topClock, botClock, titleText;
     TextBlock tTitle, tArtist, tPos, tDur, lStat, lOff, lPlainT, lHint, tCpu, tRam, tDisk, tBat;
     TextBlock[] ly = new TextBlock[5];
