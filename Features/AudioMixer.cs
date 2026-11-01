@@ -92,7 +92,8 @@ partial class Island
     void ShowRow(MixRow r)
     {
         double w = r.Bar.ActualWidth, v = Math.Max(0, Math.Min(1, r.Val < 0 ? 0 : r.Val));
-        r.Fill.Width = v * w; r.Thumb.Margin = new Thickness(v * w - 5, 0, 0, 0);
+        double center = w < 10 ? w / 2 : Math.Max(5, Math.Min(w - 5, v * w));
+        r.Fill.Width = center; r.Thumb.Margin = new Thickness(center - 5, 0, 0, 0);
         r.Fill.Background = r.Muted ? Rgb(110, 110, 110) : Accent;
         r.Pct.Text = r.Muted ? "\U0001F507" : ((int)Math.Round(v * 100)).ToString();
         r.Icon.Opacity = r.Muted ? 0.35 : 1;

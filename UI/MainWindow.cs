@@ -39,7 +39,6 @@ partial class Island : Window
     [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr h, int id);
     [DllImport("user32.dll")] static extern bool AddClipboardFormatListener(IntPtr h);
     [DllImport("user32.dll")] static extern bool RemoveClipboardFormatListener(IntPtr h);
-    [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte sc, uint fl, UIntPtr ex);
     [DllImport("user32.dll")] static extern bool LockWorkStation();
     [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
@@ -66,7 +65,7 @@ partial class Island : Window
     static readonly SolidColorBrush Reddish = new SolidColorBrush(Color.FromRgb(255, 105, 97));
 
     // ---------- UI ----------
-    Border isl, seekFill, titleHost;
+    Border isl, seekFill, seekThumb, titleHost;
     Canvas titleCanvas;
     Grid miniRoot, expRoot, seekBar, shell;
     Canvas bodyCanvas;
@@ -228,8 +227,6 @@ partial class Island : Window
         p.Orientation = Orientation.Horizontal;
         return p;
     }
-
-    static void PressKey(byte vk) { keybd_event(vk, 0, 0, UIntPtr.Zero); keybd_event(vk, 0, 2, UIntPtr.Zero); }
 
     static string Str(Dictionary<string, object> d, string k)
     {

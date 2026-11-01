@@ -30,7 +30,7 @@ Saat island ciut, jam dan judul lagu ditampilkan vertikal. Gunakan `Ctrl+Alt+I` 
 ## Build dan menjalankan
 
 1. Pastikan folder `App`, `Interop`, `UI`, `Features`, serta file `media.ps1` dan `kana.ps1` tersedia di folder proyek.
-2. Jalankan `build.beee334. Skrip akan mencari `csc.exe` dari .NET Framework dan membangun `WinIsle.exe`.
+2. Jalankan `build.bat`. Skrip akan mencari `csc.exe` dari .NET Framework dan membangun `WinIsle.exe`.
 3. Jika WinIsle sedang terbuka, skrip build akan menutup proses tersebut sebelum mengganti executable.
 4. Setelah build berhasil, jalankan `WinIsle.exe`.
 5. Biarkan `media.ps1` dan `kana.ps1` di folder yang sama dengan executable agar pembacaan media dan romanisasi dapat digunakan.

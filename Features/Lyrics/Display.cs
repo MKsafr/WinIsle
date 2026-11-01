@@ -24,7 +24,7 @@ partial class Island
     void SetStat(string t)
     {
         romKind = 0; popIdx = -2; UpdateRomButtons();
-        lyricConnectionError = t == "Tidak bisa terhubung ke LRCLIB. Periksa internet.";
+        lyricConnectionError = t == "Tidak bisa terhubung ke LRCLIB. Periksa internet." || t == "Lirik tidak ditemukan";
         if (btnLyricRefresh != null) btnLyricRefresh.IsEnabled = lyricConnectionError;
         lStat.Text = t; lStat.Visibility = Visibility.Visible;
         lSync.Visibility = Visibility.Collapsed; lPlain.Visibility = Visibility.Collapsed;

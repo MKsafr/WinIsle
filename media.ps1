@@ -5,7 +5,8 @@
 # Mode 2 (-SeekTo detik): pindahkan posisi lagu lalu keluar.
 # Mode 3 (-PauseAll): jeda semua sesi media yang sedang Playing (dipakai saat alarm timer), lalu keluar.
 # Mode 4 (-SkipNext / -SkipPrevious): pindah track sesi media aktif lalu keluar.
-param([double]$SeekTo = -1, [int]$ParentPid = 0, [switch]$PauseAll, [switch]$SkipNext, [switch]$SkipPrevious)
+# Mode 5 (-TogglePlayback): jeda atau lanjutkan sesi media aktif, lalu keluar.
+param([double]$SeekTo = -1, [int]$ParentPid = 0, [switch]$PauseAll, [switch]$SkipNext, [switch]$SkipPrevious, [switch]$TogglePlayback)
 
 $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
@@ -58,6 +59,24 @@ if ($PauseAll) {
                 Await ($s.TryPauseAsync()) ([bool]) | Out-Null
             }
         } catch {}
+    }
+    exit
+}
+
+# ---------- Mode jeda / lanjutkan sesi aktif ----------
+if ($TogglePlayback) {
+    try {
+        $s = $mgr.GetCurrentSession()
+        if (-not $s) { throw 'Tidak ada sesi media aktif.' }
+        if ("$($s.GetPlaybackInfo().PlaybackStatus)" -eq 'Playing') {
+            $ok = Await ($s.TryPauseAsync()) ([bool])
+        } else {
+            $ok = Await ($s.TryPlayAsync()) ([bool])
+        }
+        if (-not $ok) { throw 'Sesi media menolak perintah jeda/putar.' }
+    } catch {
+        [Console]::Error.WriteLine($_.Exception.Message)
+        exit 1
     }
     exit
 }

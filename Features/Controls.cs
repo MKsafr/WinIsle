@@ -4,9 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.IO.Compression;
 using System.IO;
+using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Controls;
-using System.Security.Cryptography;
 using Win32 = Microsoft.Win32;
 
 partial class Island
@@ -221,7 +221,7 @@ partial class Island
             }
         });
     }
-    
+
     bool AutoStartOn()
     {
         try

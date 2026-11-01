@@ -110,7 +110,8 @@ partial class Island
         seekBar = new Grid { Height = 16, Background = Brushes.Transparent, Cursor = Cursors.Hand };
         Border seekTrack = new Border { Height = 4, CornerRadius = new CornerRadius(2), Background = Rgb(70, 70, 70), VerticalAlignment = VerticalAlignment.Center };
         seekFill = new Border { Height = 4, Width = 0, CornerRadius = new CornerRadius(2), Background = Accent, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center };
-        seekBar.Children.Add(seekTrack); seekBar.Children.Add(seekFill);
+        seekThumb = new Border { Width = 10, Height = 10, CornerRadius = new CornerRadius(5), Background = Brushes.White, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center };
+        seekBar.Children.Add(seekTrack); seekBar.Children.Add(seekFill); seekBar.Children.Add(seekThumb);
         seekBar.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
         {
             if (curDur <= 0) return;
@@ -125,7 +126,7 @@ partial class Island
         tPos = T("0:00", 0.5, 10); tDur = T("0:00", 0.5, 10);
         tPos.HorizontalAlignment = HorizontalAlignment.Left; tDur.HorizontalAlignment = HorizontalAlignment.Right;
         Grid timeGrid = new Grid(); timeGrid.Children.Add(tPos); timeGrid.Children.Add(tDur);
-        btnPlay = SB("\u25B6", delegate { PressKey(0xB3); playingNow = !playingNow; btnPlay.Content = playingNow ? "\u23F8" : "\u25B6"; baseAt = DateTime.Now; });
+        btnPlay = SB("\u25B6", delegate { TogglePlayback(); });
         btnPlay.Padding = new Thickness(16, 3, 16, 3);
         StackPanel ctrl = Row(SB("\u23EE", delegate { SkipTrack(false); }), btnPlay, SB("\u23ED", delegate { SkipTrack(true); }));
         ctrl.HorizontalAlignment = HorizontalAlignment.Center; ctrl.Margin = new Thickness(0, 10, 0, 0);
@@ -257,16 +258,16 @@ partial class Island
         RefreshGlowBtn();
         RefreshAutoBtn();
 
-        StackPanel volRow = Row(SB("\U0001F509 \u2212", delegate { PressKey(0xAE); }), SB("\U0001F507", delegate { PressKey(0xAD); }), SB("\U0001F50A +", delegate { PressKey(0xAF); }));
-        volRow.HorizontalAlignment = HorizontalAlignment.Center;
+        TextBlock versionLabel = T("Versi " + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3), 0.45, 9);
+        versionLabel.HorizontalAlignment = HorizontalAlignment.Center;
         StackPanel ctl = Col(
             btnAwake,
             SB("\U0001F512 Kunci layar", delegate { LockWorkStation(); }),
             SB("\u2B07 Ke belakang", delegate { ToggleBack(); }),
             btnAuto,
             btnGlow,
-            volRow,
-            SB("\u2716 Keluar", delegate { ExitApp(); }));
+            SB("\u2716 Keluar", delegate { ExitApp(); }),
+            versionLabel);
         ctl.Margin = new Thickness(0, 2, 0, 0);
         pages[7] = ctl;
 
@@ -377,6 +378,7 @@ partial class Island
     void EndPopSettingsEditIfNeeded()
     {
         if (popFontChoice.IsKeyboardFocusWithin || popWidthChoice.IsKeyboardFocusWithin) return;
+        if (lyricSettingsPanel.IsKeyboardFocusWithin) return;
         if (!popSettingsEditing) return;
         popSettingsEditing = false;
         SetActivatable(false);
@@ -429,6 +431,12 @@ partial class Island
     {
         if (pop == null) pop = new PopLyric();
         bool show = lyricSettingsPanel.Visibility != Visibility.Visible;
+        if (!show && popSettingsEditing)
+        {
+            popSettingsEditing = false;
+            SetActivatable(false);
+            prevFg = IntPtr.Zero;
+        }
         lyricArea.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
         lyricSettingsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         btnLyricSettings.Content = show ? "\u2699 Tutup" : "\u2699 Pengaturan";

@@ -94,7 +94,7 @@ partial class Island
             baseAt = DateTime.Now;
         }
 
-        string key = ti + "\u0001" + ar;
+        string key = ti + "\u0001" + ar + "\u0001" + al + "\u0001" + (dur > 0 ? Math.Round(dur).ToString(IC) : "");
         if (key == lkey) return;
         lkey = key; lines.Clear(); lsynced = false; curIdx = -2;
         double o; offset = offsets.TryGetValue(key, out o) ? o : 0; ShowOff();
@@ -107,7 +107,7 @@ partial class Island
     void RetryLyrics()
     {
         if (!lyricConnectionError || string.IsNullOrEmpty(curTi)) return;
-        string key = curTi + "\u0001" + tArtist.Text;
+        string key = curTi + "\u0001" + tArtist.Text + "\u0001" + curAlbum + "\u0001" + (curDur > 0 ? Math.Round(curDur).ToString(IC) : "");
         cache.Remove(key);
         SearchLyricsAsync(curTi, tArtist.Text, curAlbum, curDur, key);
     }
@@ -118,7 +118,8 @@ partial class Island
         System.Threading.ThreadPool.QueueUserWorkItem(delegate
         {
             LRes r = null;
-            try { r = Fetch(title, artist, album, duration); } catch { }
+            try { r = Fetch(title, artist, album, duration); }
+            catch (Exception ex) { Prog.Log(ex.ToString()); r = new LRes { err = true }; }
             Dispatcher.BeginInvoke(new Action(delegate
             {
                 if (r != null && !r.err) cache[key] = r;
@@ -141,13 +142,13 @@ partial class Island
         double p = CurPos();
         if (curDur <= 0 || p < 0)
         {
-            seekFill.Width = 0;
+            ShowSeekPosition(0);
             if (tPos.Text != "0:00") tPos.Text = "0:00";
             string duration = curDur > 0 ? Fmt(curDur) : "0:00";
             if (tDur.Text != duration) tDur.Text = duration;
             return;
         }
-        seekFill.Width = seekBar.ActualWidth * Math.Min(1, p / curDur);
+        ShowSeekPosition(Math.Min(1, p / curDur));
         string position = Fmt(p), durationText = Fmt(curDur);
         if (tPos.Text != position) tPos.Text = position;
         if (tDur.Text != durationText) tDur.Text = durationText;
@@ -158,8 +159,53 @@ partial class Island
         double w = seekBar.ActualWidth;
         if (w <= 0) return;
         dragRatio = Math.Max(0, Math.Min(1, x / w));
-        seekFill.Width = w * dragRatio;
+        ShowSeekPosition(dragRatio);
         tPos.Text = Fmt(dragRatio * curDur);
+    }
+
+    void ShowSeekPosition(double ratio)
+    {
+        double width = seekBar.ActualWidth;
+        if (width <= 0) return;
+        double center = Math.Max(5, Math.Min(width - 5, width * Math.Max(0, Math.Min(1, ratio))));
+        if (width < 10) center = width / 2;
+        seekFill.Width = center;
+        seekThumb.Margin = new Thickness(center - 5, 0, 0, 0);
+    }
+
+    void TogglePlayback()
+    {
+        if (!File.Exists(ScriptPath()))
+        {
+            Prog.Log("media.ps1 tidak ditemukan; tidak dapat mengubah status pemutaran.");
+            return;
+        }
+        try
+        {
+            ProcessStartInfo psi = new ProcessStartInfo("powershell.exe",
+                "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + ScriptPath() + "\" -TogglePlayback");
+            psi.CreateNoWindow = true; psi.UseShellExecute = false; psi.RedirectStandardError = true;
+            Process process = new Process { StartInfo = psi };
+            if (!process.Start())
+            {
+                process.Dispose();
+                Prog.Log("Gagal menjalankan perintah media untuk jeda/putar.");
+                return;
+            }
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    string error = process.StandardError.ReadToEnd();
+                    process.WaitForExit();
+                    if (process.ExitCode != 0)
+                        Prog.Log("Perintah jeda/putar media gagal: " + error.Trim());
+                }
+                catch (Exception ex) { Prog.Log(ex.ToString()); }
+                finally { process.Dispose(); }
+            });
+        }
+        catch (Exception ex) { Prog.Log(ex.ToString()); }
     }
 
     void SeekTo(double sec)
