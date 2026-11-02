@@ -32,7 +32,7 @@ partial class Island
 
         // Titik penunjuk posisi fitur (klik titik untuk loncat ke fitur itu)
         pageDotsPanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(6, 0, 0, 0) };
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < pages.Length; i++)
         {
             int idx = i;
             Border dot = new Border { Width = 5, Height = 5, CornerRadius = new CornerRadius(4), Background = Rgb(110, 110, 110), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };

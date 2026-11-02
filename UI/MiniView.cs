@@ -85,8 +85,9 @@ partial class Island
     // Teks pil ciut: judul lagu (atau pesan alarm) + hitung mundur timer kalau ada.
     void UpdateCollapsed()
     {
-        string bt = alarmOn ? AlarmMsg : mediaColl;
-        string cd = alarmOn ? "" : CountdownText();
+        bool showScanTextMessage = scanTextMiniMessage.Length > 0;
+        string bt = alarmOn ? AlarmMsg : showScanTextMessage ? scanTextMiniMessage : mediaColl;
+        string cd = alarmOn || showScanTextMessage ? "" : CountdownText();
         bool hasCd = cd.Length > 0;
         string key = bt + "\u0001" + (hasCd ? "1" : "0");
         if (key != titleShown) { titleShown = key; cdShown = ""; if (bt.Length > 0 || hasCd) SetupTitle(bt, hasCd); }
@@ -233,15 +234,18 @@ partial class Island
         btnStopAlarm.Visibility = Visibility.Collapsed;
         pages[2] = Col(tTimer, presets, tctl, btnStopAlarm);
 
-        // 5: Clipboard
+        // 5: Scan Teks
+        pages[5] = BuildScanTextPage();
+
+        // 6: Clipboard
         clipList = new StackPanel();
         clipScroll = new ScrollViewer { Height = 124, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, Content = clipList };
         TextBlock clipHint = T("Klik item untuk menyalin ulang", 0.5, 10.5); clipHint.Margin = new Thickness(0, 4, 0, 4); clipHint.HorizontalAlignment = HorizontalAlignment.Center;
         Button clipClear = SB("Hapus riwayat", delegate { hist.Clear(); RenderClip(); });
         clipClear.Margin = new Thickness(0, 6, 0, 0);
-        pages[5] = Col(clipHint, clipScroll, clipClear);
+        pages[6] = Col(clipHint, clipScroll, clipClear);
 
-        // 6: Sistem
+        // 7: Sistem
         tCpu = T("CPU", 1, 12); tRam = T("RAM", 1, 12); tDisk = T("", 0.7, 10.5);
         pCpu = NewBar(); pRam = NewBar();
         tNetLbl = T("Internet (\u2193 unduh, \u2191 unggah)", 0.6, 10.5); tNetLbl.Margin = new Thickness(0, 4, 0, 1);
@@ -249,9 +253,9 @@ partial class Island
         tNet.Margin = new Thickness(0, 0, 0, 4); tDisk.Margin = new Thickness(0, 0, 0, 8);
         StackPanel sys = Col(tCpu, pCpu, tRam, pRam, tNetLbl, tNet, tDisk, BuildBatteryCard());
         sys.Margin = new Thickness(0, 4, 0, 0);
-        pages[6] = sys;
+        pages[7] = sys;
 
-        // 7: Kontrol
+        // 8: Kontrol
         btnAwake = SB("\u2615 Keep awake: mati", delegate { ToggleAwake(); });
         btnAuto = SB("", delegate { ToggleAutostart(); });
         btnGlow = SB("", delegate { ToggleGlow(); });
@@ -269,7 +273,7 @@ partial class Island
             SB("\u2716 Keluar", delegate { ExitApp(); }),
             versionLabel);
         ctl.Margin = new Thickness(0, 2, 0, 0);
-        pages[7] = ctl;
+        pages[8] = ctl;
 
         // 3: Suara (mixer volume per aplikasi)
         pages[3] = BuildMixerPage();

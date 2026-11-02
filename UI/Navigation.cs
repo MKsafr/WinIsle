@@ -22,12 +22,27 @@ partial class Island
         bool inside = d.X >= x0 && d.X <= x1 && d.Y >= y0 && d.Y <= y1;
         if (editing && !inside && (GetAsyncKeyState(0x01) & 0x8000) != 0) EndEdit(false); // klik di luar island
         if (isDragging || editing) inside = true;
-        if (inside) { outSince = DateTime.MinValue; if (!open) SetOpen(true); }
+        if (inside)
+        {
+            outSince = DateTime.MinValue;
+            if (!open)
+            {
+                if (scanTextAutoOpenPending && scanTextHoverArmed)
+                {
+                    scanTextAutoOpenPending = false;
+                    scanTextHoverArmed = false;
+                    SwitchTo(ScanTextTab);
+                }
+                SetOpen(true);
+            }
+        }
         else if (open && DateTime.Now > alertUntil)
         {
+            if (scanTextAutoOpenPending) scanTextHoverArmed = true;
             if (outSince == DateTime.MinValue) outSince = DateTime.Now;
             else if ((DateTime.Now - outSince).TotalMilliseconds > 300) SetOpen(false);
         }
+        else if (scanTextAutoOpenPending) scanTextHoverArmed = true;
     }
 
     void SetOpen(bool o)
@@ -57,6 +72,7 @@ partial class Island
             fade.Completed += delegate { if (!open) expRoot.Visibility = Visibility.Collapsed; };
             expRoot.BeginAnimation(OpacityProperty, fade);
             miniRoot.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(260)));
+            if (scanTextRestoreOnClose && currentTab == ScanTextTab) RestoreScanTextTab();
         }
     }
 
@@ -78,6 +94,7 @@ partial class Island
         ScrollViewer sv = null;
         while (o != null)
         {
+            if (o == scanTextOutput) return;
             if (o == lPlain || o == clipScroll || o == mixScroll) { sv = (ScrollViewer)o; break; }
             o = (o is Visual) ? VisualTreeHelper.GetParent(o) : null;
         }
@@ -105,6 +122,17 @@ partial class Island
         if (idx < 0) idx = pages.Length - 1;
         if (idx >= pages.Length) idx = 0;
         if (idx == currentTab) return;
+        if (idx != ScanTextTab)
+        {
+            lastNonScanTab = idx;
+            if (scanTextRestorePending)
+            {
+                scanTextReturnTab = idx;
+                scanTextAutoOpenPending = false;
+                scanTextRestorePending = false;
+                scanTextRestoreOnClose = false;
+            }
+        }
         UIElement old = pages[currentTab], nw = pages[idx];
         int tk = ++switchTok;
         currentTab = idx; curIdx = -2;

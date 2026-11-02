@@ -6,7 +6,7 @@ Proyek ini adalah adaptasi Windows dari ide yang dipopulerkan oleh **vorssaint**
 
 ## Fitur
 
-WinIsle memiliki delapan tab. Pindah tab dengan tombol ▲ / ▼ atau penunjuk di sisi kiri.
+WinIsle memiliki sembilan tab. Pindah tab dengan tombol ▲ / ▼ atau penunjuk di sisi kiri.
 
 | Tab | Isi |
 | --- | --- |
@@ -15,6 +15,7 @@ WinIsle memiliki delapan tab. Pindah tab dengan tombol ▲ / ▼ atau penunjuk d
 | Timer | Preset timer dan alarm |
 | Suara | Volume utama dan volume per aplikasi |
 | Kalender | Kalender Indonesia |
+| Scan Teks | Pilih area layar dengan `Alt+Shift+O`, kenali teks secara lokal, lalu salin hasilnya |
 | Clipboard | Riwayat salinan dan salin ulang |
 | Sistem | CPU, RAM, jaringan, disk, dan baterai |
 | Kontrol | Keep-awake, kunci layar, autostart, glow, dan keluar |
@@ -29,11 +30,11 @@ Saat island ciut, jam dan judul lagu ditampilkan vertikal. Gunakan `Ctrl+Alt+I` 
 
 ## Build dan menjalankan
 
-1. Pastikan folder `App`, `Interop`, `UI`, `Features`, serta file `media.ps1` dan `kana.ps1` tersedia di folder proyek.
+1. Pastikan folder `App`, `Interop`, `UI`, `Features`, serta file `media.ps1`, `kana.ps1`, dan `scantext.ps1` tersedia di folder proyek.
 2. Jalankan `build.bat`. Skrip akan mencari `csc.exe` dari .NET Framework dan membangun `WinIsle.exe`.
 3. Jika WinIsle sedang terbuka, skrip build akan menutup proses tersebut sebelum mengganti executable.
 4. Setelah build berhasil, jalankan `WinIsle.exe`.
-5. Biarkan `media.ps1` dan `kana.ps1` di folder yang sama dengan executable agar pembacaan media dan romanisasi dapat digunakan.
+5. Biarkan `media.ps1`, `kana.ps1`, dan `scantext.ps1` di folder yang sama dengan executable agar pembacaan media, romanisasi, dan Scan Teks dapat digunakan.
 
 ## Struktur kode
 
@@ -48,7 +49,7 @@ File di dalam folder `UI` dan `Features` melengkapi kelas window utama yang sama
 
 ## Catatan
 
-- Hanya untuk Windows; beberapa fitur memakai API Windows (Core Audio, clipboard, registry).
+- Hanya untuk Windows; beberapa fitur memakai API Windows (Core Audio, OCR Windows, clipboard, registry).
 - Lirik dicari dari LRCLIB (tersinkron), lalu NetEase (tersinkron), kemudian lirik polos LRCLIB.
 - Jika autostart diaktifkan, entri disimpan di registry pengguna (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
 - Jika ada error saat berjalan, catatannya ditulis ke `error.log` di folder aplikasi.
