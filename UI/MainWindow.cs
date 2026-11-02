@@ -54,7 +54,7 @@ partial class Island : Window
 
     // ---------- Tipe bantu ----------
     class LL { public double t; public string s, r; }   // s = teks asli, r = versi latin
-    class LRes { public string synced = "", plain = ""; public bool instr, err; public double score; }
+    class LRes { public string synced = "", plain = "", error = ""; public bool instr, err; public double score; }
     class LQuery { public string title, artist; }
 
     static readonly CultureInfo IC = CultureInfo.InvariantCulture;
