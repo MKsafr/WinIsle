@@ -119,7 +119,7 @@ partial class Island
         {
             LRes r = null;
             try { r = Fetch(title, artist, album, duration); }
-            catch (Exception ex) { Prog.Log(ex.ToString()); r = new LRes { err = true, error = "pencarian lirik gagal" }; }
+            catch (Exception ex) { Prog.Log(ex.ToString()); r = new LRes { err = true }; }
             Dispatcher.BeginInvoke(new Action(delegate
             {
                 if (r != null && !r.err) cache[key] = r;

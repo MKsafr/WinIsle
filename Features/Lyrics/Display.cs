@@ -24,7 +24,7 @@ partial class Island
     void SetStat(string t)
     {
         romKind = 0; popIdx = -2; UpdateRomButtons();
-        lyricConnectionError = t.StartsWith("LRCLIB sedang bermasalah", StringComparison.Ordinal) || t == "Lirik tidak ditemukan";
+        lyricConnectionError = t == "Tidak bisa terhubung ke LRCLIB. Periksa internet." || t == "Lirik tidak ditemukan";
         if (btnLyricRefresh != null) btnLyricRefresh.IsEnabled = lyricConnectionError;
         lStat.Text = t; lStat.Visibility = Visibility.Visible;
         lSync.Visibility = Visibility.Collapsed; lPlain.Visibility = Visibility.Collapsed;
@@ -36,7 +36,7 @@ partial class Island
         if (btnLyricRefresh != null) btnLyricRefresh.IsEnabled = false;
         lines.Clear(); lsynced = false; curIdx = -2; popIdx = -2; plainSrc = ""; plainRom = ""; romKind = 0; UpdateRomButtons();
         if (r == null) { SetStat("Lirik tidak ditemukan"); return; }
-        if (r.err) { SetStat("LRCLIB sedang bermasalah (" + r.error + "). Coba lagi nanti."); return; }
+        if (r.err) { SetStat("Tidak bisa terhubung ke LRCLIB. Periksa internet."); return; }
         if (r.instr) { SetStat("\u266A Instrumental"); return; }
         if (r.synced.Length > 0) ParseLrc(r.synced);
         if (lines.Count > 0)

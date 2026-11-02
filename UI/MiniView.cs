@@ -148,7 +148,7 @@ partial class Island
         lPlainT = T("", 0.85, 11.5); lPlainT.TextWrapping = TextWrapping.Wrap; lPlainT.TextAlignment = TextAlignment.Center; lPlainT.TextTrimming = TextTrimming.None;
         lPlain = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, Content = lPlainT, Visibility = Visibility.Collapsed };
         btnLyricRefresh = SB("\u21BB Refresh", delegate { RetryLyrics(); });
-        btnLyricRefresh.ToolTip = "Coba ulang pencarian lirik di LRCLIB";
+        btnLyricRefresh.ToolTip = "Coba hubungkan kembali ke LRCLIB";
         btnLyricRefresh.IsEnabled = false;
         btnLyricRefresh.Focusable = false;
         btnLyricRefresh.FontSize = 10;
