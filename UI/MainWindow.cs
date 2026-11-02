@@ -27,7 +27,7 @@ partial class Island : Window
     const bool TitleUp = false;     // true = judul bergerak dari bawah ke atas, false = dari atas ke bawah
     const double TitleDelay = 2;    // jeda (detik) sebelum judul mulai bergerak setelah lagu/media berganti
     const double TitleGap = 28;     // jarak (piksel) antara akhir judul dan awal judul berikutnya
-    const int MaxClip = 8;
+    const int MaxClip = 8, ScanTextTab = 5, ScanTextFeedbackSeconds = 7;
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     // ---------- Win32 ----------
@@ -35,12 +35,14 @@ partial class Island : Window
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);
     [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int i);
     [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr h, int i, int v);
-    [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr h, int id, uint m, uint vk);
+    [DllImport("user32.dll", SetLastError = true)] static extern bool RegisterHotKey(IntPtr h, int id, uint m, uint vk);
     [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr h, int id);
     [DllImport("user32.dll")] static extern bool AddClipboardFormatListener(IntPtr h);
     [DllImport("user32.dll")] static extern bool RemoveClipboardFormatListener(IntPtr h);
+    [DllImport("user32.dll")] static extern uint GetClipboardSequenceNumber();
     [DllImport("user32.dll")] static extern bool LockWorkStation();
     [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint processId);
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
     [DllImport("kernel32.dll")] static extern uint SetThreadExecutionState(uint f);
@@ -52,7 +54,7 @@ partial class Island : Window
 
     // ---------- Tipe bantu ----------
     class LL { public double t; public string s, r; }   // s = teks asli, r = versi latin
-    class LRes { public string synced = "", plain = ""; public bool instr, err; public double score; }
+    class LRes { public string synced = "", plain = "", error = ""; public bool instr, err; public double score; }
     class LQuery { public string title, artist; }
 
     static readonly CultureInfo IC = CultureInfo.InvariantCulture;
@@ -72,9 +74,20 @@ partial class Island : Window
     System.Windows.Shapes.Path bodyShape;
     System.Windows.Media.Effects.DropShadowEffect glowEffect;
     UniformGrid calGrid;
-    UIElement[] pages = new UIElement[8];
-    Border[] dots = new Border[8];
+    UIElement[] pages = new UIElement[9];
+    Border[] dots = new Border[9];
     ScrollViewer clipScroll;
+    TextBox scanTextOutput;
+    TextBlock scanTextStatus;
+    Button btnScanText, btnCopyScanText;
+    DispatcherTimer scanTextTimer;
+    DispatcherTimer scanTextFeedbackTimer;
+    uint scanTextClipboardSequence;
+    DateTime scanTextDeadline, scanTextPickerClosedAt = DateTime.MinValue;
+    const int ScanTextCancelGraceMilliseconds = 1200;
+    int lastNonScanTab, scanTextReturnTab;
+    bool scanTextAutoOpenPending, scanTextHoverArmed, scanTextRestorePending, scanTextRestoreOnClose, scanTextPickerSeen;
+    string scanTextMiniMessage = "";
     StackPanel pageDotsPanel;
     Grid lyricArea, lyricSettingsPanel;
     TextBox popFontChoice, popWidthChoice;
@@ -89,7 +102,7 @@ partial class Island : Window
     StackPanel lSync, clipList;
     ScrollViewer lPlain;
     ProgressBar pCpu, pRam;
-    readonly string[] tabNames = { "\u266A Musik", "\U0001F3A4 Lirik", "\u23F1 Timer", "\U0001F50A Suara", "\U0001F4C5 Kalender", "\U0001F4CB Clipboard", "\U0001F4CA Sistem", "\u2699 Kontrol" };
+    readonly string[] tabNames = { "\u266A Musik", "\U0001F3A4 Lirik", "\u23F1 Timer", "\U0001F50A Suara", "\U0001F4C5 Kalender", "\U0001F50D Scan Teks", "\U0001F4CB Clipboard", "\U0001F4CA Sistem", "\u2699 Kontrol" };
 
     // ---------- State ----------
     List<LL> lines = new List<LL>();
@@ -287,7 +300,10 @@ partial class Island : Window
         SizeChanged += delegate { UpdateBodyShape(); };
         UpdateBodyShape();
         isl.PreviewMouseWheel += Wheel;
-        isl.PreviewMouseDown += delegate { if (editing && !tTimer.IsMouseOver) EndEdit(true); };
+        isl.PreviewMouseDown += delegate
+        {
+            if (editing && !tTimer.IsMouseOver && (scanTextOutput == null || !scanTextOutput.IsMouseOver)) EndEdit(true);
+        };
         Deactivated += delegate { if (editing) EndEdit(false); };
 
         tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Visible = true, Text = "WinIsle" };

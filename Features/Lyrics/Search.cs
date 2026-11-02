@@ -62,27 +62,75 @@ partial class Island
         return unique;
     }
 
-    static string Http(string url, out bool failed) { return Http(url, out failed, "WinIsle/1.0 (https://github.com/MKsafr/VorsWinIsland)", null); }
+    static string Http(string url, out bool failed) { return Http(url, out failed, "WinIsle/1.0 (https://github.com/MKsafr/WinIsle)", null); }
 
     static string Http(string url, out bool failed, string ua, string referer)
     {
+        string error;
+        return Http(url, out failed, out error, ua, referer, false);
+    }
+
+    static string HttpLrclib(string url, out bool failed, out string error)
+    {
+        string result = Http(url, out failed, out error,
+            "WinIsle/1.0 (https://github.com/MKsafr/WinIsle)", null, true);
+        if (failed) Prog.Log("LRCLIB request failed: " + error);
+        return result;
+    }
+
+    static string Http(string url, out bool failed, out string error, string ua, string referer, bool retryTransient)
+    {
         failed = false;
-        try
+        error = "";
+        for (int attempt = 0; attempt < (retryTransient ? 2 : 1); attempt++)
         {
-            HttpWebRequest rq = (HttpWebRequest)WebRequest.Create(url);
-            rq.UserAgent = ua; rq.Timeout = 5000; rq.ReadWriteTimeout = 5000;
-            if (referer != null) rq.Referer = referer;
-            using (HttpWebResponse rs = (HttpWebResponse)rq.GetResponse())
-            using (StreamReader sr = new StreamReader(rs.GetResponseStream(), Encoding.UTF8))
-                return sr.ReadToEnd();
+            failed = false;
+            error = "";
+            try
+            {
+                HttpWebRequest rq = (HttpWebRequest)WebRequest.Create(url);
+                rq.UserAgent = ua; rq.Timeout = 5000; rq.ReadWriteTimeout = 5000;
+                if (referer != null) rq.Referer = referer;
+                using (HttpWebResponse rs = (HttpWebResponse)rq.GetResponse())
+                using (StreamReader sr = new StreamReader(rs.GetResponseStream(), Encoding.UTF8))
+                    return sr.ReadToEnd();
+            }
+            catch (WebException ex)
+            {
+                HttpWebResponse hr = ex.Response as HttpWebResponse;
+                if (hr != null && hr.StatusCode == HttpStatusCode.NotFound) return null;
+
+                int statusCode = hr == null ? 0 : (int)hr.StatusCode;
+                error = statusCode == 429 ? "HTTP 429 (rate limited)" :
+                    (statusCode > 0 ? "HTTP " + statusCode : ex.Status == WebExceptionStatus.Timeout ?
+                    "timeout" : "koneksi (" + ex.Status + ")");
+                bool transient = statusCode == 408 || statusCode == 500 || statusCode == 502 ||
+                    statusCode == 503 || statusCode == 504 || (hr == null &&
+                    (ex.Status == WebExceptionStatus.Timeout ||
+                    ex.Status == WebExceptionStatus.ConnectFailure ||
+                    ex.Status == WebExceptionStatus.NameResolutionFailure ||
+                    ex.Status == WebExceptionStatus.ProxyNameResolutionFailure ||
+                    ex.Status == WebExceptionStatus.ReceiveFailure ||
+                    ex.Status == WebExceptionStatus.SendFailure ||
+                    ex.Status == WebExceptionStatus.ConnectionClosed));
+                if (hr != null) hr.Close();
+                if (retryTransient && attempt == 0 && transient)
+                {
+                    System.Threading.Thread.Sleep(500);
+                    continue;
+                }
+                failed = true;
+                return null;
+            }
+            catch (Exception ex)
+            {
+                error = ex.GetType().Name;
+                failed = true;
+                return null;
+            }
         }
-        catch (WebException ex)
-        {
-            HttpWebResponse hr = ex.Response as HttpWebResponse;
-            if (hr != null && hr.StatusCode == HttpStatusCode.NotFound) return null;
-            failed = true; return null;
-        }
-        catch { failed = true; return null; }
+        failed = true;
+        return null;
     }
 
     static LRes ToRes(Dictionary<string, object> d)
@@ -398,7 +446,8 @@ partial class Island
         System.Web.Script.Serialization.JavaScriptSerializer ser = new System.Web.Script.Serialization.JavaScriptSerializer();
         ser.MaxJsonLength = int.MaxValue;
         const string api = "https://lrclib.net/api/";
-        int searchOks = 0, requests = 0; bool f;
+        int searchOks = 0, requests = 0; bool f, requestFailed = false;
+        string lastError = "";
         LRes bestResult = null;
         Stopwatch timer = Stopwatch.StartNew();
         List<LQuery> queries = new List<LQuery>();
@@ -448,9 +497,10 @@ partial class Island
             if (query.artist.Length == 0) continue;
             string u = api + "get?track_name=" + E(query.title) + "&artist_name=" + E(query.artist);
             if (dur > 0 && dur <= 3600) u += "&duration=" + ((int)Math.Round(dur)).ToString(IC);
-            string js = Http(u, out f);
+            string js = HttpLrclib(u, out f, out lastError);
             requests++;
-            if (f || js == null) continue;
+            if (f) { requestFailed = true; break; }
+            if (js == null) continue;
             try
             {
                 Dictionary<string, object> data = ser.DeserializeObject(js) as Dictionary<string, object>;
@@ -468,17 +518,24 @@ partial class Island
                 r.score = ResultScore(resultTrack, resultArtist, resultDuration, dur, query.title, query.artist, title, Str(data, "albumName"), r.synced);
                 if (Has(r) && BetterResult(r, bestResult)) bestResult = r;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Prog.Log("LRCLIB track response parsing failed: " + ex.GetType().Name);
+                lastError = "respons LRCLIB tidak valid";
+                requestFailed = true;
+                break;
+            }
         }
-        foreach (LQuery query in queries)
+        if (!requestFailed) foreach (LQuery query in queries)
         {
             if (requests >= 5 || timer.ElapsedMilliseconds >= 10000) break;
             string q = query.artist.Length > 0
                 ? "track_name=" + E(query.title) + "&artist_name=" + E(query.artist)
                 : "q=" + E(query.title);
-            string js = Http(api + "search?" + q, out f);
+            string js = HttpLrclib(api + "search?" + q, out f, out lastError);
             requests++;
-            if (f || js == null) continue;
+            if (f) { requestFailed = true; break; }
+            if (js == null) continue;
             try
             {
                 object results = ser.DeserializeObject(js);
@@ -486,10 +543,17 @@ partial class Island
                 LRes best = Pick(results, dur, query.title, query.artist, title);
                 if (BetterResult(best, bestResult)) bestResult = best;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Prog.Log("LRCLIB search response parsing failed: " + ex.GetType().Name);
+                lastError = "respons LRCLIB tidak valid";
+                requestFailed = true;
+                break;
+            }
         }
         if (bestResult != null) return bestResult;
-        if (searchOks == 0) return new LRes { err = true };
+        if (requestFailed || searchOks == 0)
+            return new LRes { err = true, error = lastError.Length > 0 ? lastError : "pencarian melewati batas waktu" };
         return bestResult;
     }
 

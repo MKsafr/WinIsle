@@ -52,7 +52,8 @@ partial class Island
     // Keluar dari mode ketik timer. restoreFg=true: kembalikan fokus keyboard ke aplikasi sebelumnya.
     void EndEdit(bool restoreFg)
     {
-        if (!editing && !tTimer.IsKeyboardFocusWithin) return;
+        if (!editing && !tTimer.IsKeyboardFocusWithin &&
+            (scanTextOutput == null || !scanTextOutput.IsKeyboardFocusWithin)) return;
         if (restoreFg && prevFg != IntPtr.Zero && prevFg != hwnd) SetForegroundWindow(prevFg);
         Keyboard.ClearFocus();
         editing = false; tTimer.Foreground = Brushes.White; SetActivatable(false);

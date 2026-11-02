@@ -113,7 +113,7 @@ partial class Island
             }
             prevTot = tot; prevIdle = idle;
         }
-        if (!open || currentTab != 6) return;
+        if (!open || currentTab != 7) return;
 
         pCpu.Value = cpuPct; tCpu.Text = "CPU  " + (int)Math.Round(cpuPct) + "%";
         MEM m = new MEM(); m.dwLength = (uint)Marshal.SizeOf(typeof(MEM));
