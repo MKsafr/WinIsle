@@ -6,7 +6,7 @@ Proyek ini adalah adaptasi Windows dari ide yang dipopulerkan oleh **vorssaint**
 
 ## Fitur
 
-WinIsle memiliki sembilan tab. Pindah tab dengan tombol ▲ / ▼ atau penunjuk di sisi kiri.
+WinIsle memiliki sembilan tab. Pindah tab dengan tombol ▲ / ▼ atau ikon fitur di sisi kiri.
 
 | Tab | Isi |
 | --- | --- |
@@ -28,13 +28,20 @@ Saat island ciut, jam dan judul lagu ditampilkan vertikal. Gunakan `Ctrl+Alt+I` 
 - .NET Framework 4.x
 - Windows PowerShell 5.1
 
-## Build dan menjalankan
+## Download dan menjalankan
 
-1. Pastikan folder `App`, `Interop`, `UI`, `Features`, serta file `media.ps1`, `kana.ps1`, dan `scantext.ps1` tersedia di folder proyek.
-2. Jalankan `build.bat`. Skrip akan mencari `csc.exe` dari .NET Framework dan membangun `WinIsle.exe`.
-3. Jika WinIsle sedang terbuka, skrip build akan menutup proses tersebut sebelum mengganti executable.
-4. Setelah build berhasil, jalankan `WinIsle.exe`.
-5. Biarkan `media.ps1`, `kana.ps1`, dan `scantext.ps1` di folder yang sama dengan executable agar pembacaan media, romanisasi, dan Scan Teks dapat digunakan.
+1. [Download WinIsle versi terbaru (.zip)](https://github.com/MKsafr/WinIsle/releases/latest/download/WinIsle-latest.zip).
+2. Ekstrak ZIP ke folder pilihan, misalnya `Documents\WinIsle`.
+3. Buka folder hasil ekstrak, lalu jalankan `WinIsle.exe`.
+4. Biarkan `media.ps1`, `kana.ps1`, dan `scantext.ps1` tetap di folder yang sama dengan executable agar fitur media, romanisasi, dan Scan Teks dapat digunakan.
+
+## Build dari source
+
+1. Pastikan Windows PowerShell 5.1 dan .NET Framework 4.x tersedia.
+2. Pastikan folder `App`, `Interop`, `UI`, `Features`, serta file `media.ps1`, `kana.ps1`, `scantext.ps1`, dan `WinIsle.ico` tersedia di folder proyek.
+3. Jalankan `build.bat`. Skrip akan mencari `csc.exe` dari .NET Framework dan membangun `WinIsle.exe`.
+4. Jika WinIsle sedang terbuka, skrip build akan menutup proses tersebut sebelum mengganti executable.
+5. Setelah build berhasil, jalankan `WinIsle.exe`.
 
 ## Struktur kode
 

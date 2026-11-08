@@ -22,7 +22,7 @@ partial class Island : Window
 {
     // Ukuran (dalam DIP). C* = ciut (mengecil), O* = open (membesar), W* = ukuran window transparan.
     // CH = tinggi pil saat tidak ada lagu, CHT = tinggi pil saat lagu diputar (ada judul vertikal), TH = tinggi area judul.
-    const double CW = 36, CH = 84, CHT = 232, TH = 140, OW = 240, OH = 272, WW = 262, WH = 296;
+    const double CW = 36, CH = 84, CHT = 232, TH = 140, OW = 268, OH = 272, WW = 290, WH = 296;
     const double TitleSpeed = 22;   // kecepatan judul bergerak (piksel per detik), makin kecil makin lambat
     const bool TitleUp = false;     // true = judul bergerak dari bawah ke atas, false = dari atas ke bawah
     const double TitleDelay = 2;    // jeda (detik) sebelum judul mulai bergerak setelah lagu/media berganti
@@ -75,7 +75,7 @@ partial class Island : Window
     System.Windows.Media.Effects.DropShadowEffect glowEffect;
     UniformGrid calGrid;
     UIElement[] pages = new UIElement[9];
-    Border[] dots = new Border[9];
+    Border[] tabIconCircles = new Border[9];
     ScrollViewer clipScroll;
     TextBox scanTextOutput;
     TextBlock scanTextStatus;
@@ -88,7 +88,7 @@ partial class Island : Window
     int lastNonScanTab, scanTextReturnTab;
     bool scanTextAutoOpenPending, scanTextHoverArmed, scanTextRestorePending, scanTextRestoreOnClose, scanTextPickerSeen;
     string scanTextMiniMessage = "";
-    StackPanel pageDotsPanel;
+    StackPanel pageIconsPanel;
     Grid lyricArea, lyricSettingsPanel;
     TextBox popFontChoice, popWidthChoice;
     Button[] popAlignmentButtons;
@@ -103,6 +103,7 @@ partial class Island : Window
     ScrollViewer lPlain;
     ProgressBar pCpu, pRam;
     readonly string[] tabNames = { "\u266A Musik", "\U0001F3A4 Lirik", "\u23F1 Timer", "\U0001F50A Suara", "\U0001F4C5 Kalender", "\U0001F50D Scan Teks", "\U0001F4CB Clipboard", "\U0001F4CA Sistem", "\u2699 Kontrol" };
+    readonly string[] tabIcons = { "\u266A", "\U0001F3A4", "\u23F1", "\U0001F50A", "\U0001F4C5", "\U0001F50D", "\U0001F4CB", "\U0001F4CA", "\u2699" };
 
     // ---------- State ----------
     List<LL> lines = new List<LL>();
@@ -122,6 +123,7 @@ partial class Island : Window
     List<string> hist = new List<string>();
     IntPtr hwnd;
     Forms.NotifyIcon tray;
+    System.Drawing.Icon appIcon;
     Process mediaProc;
     TranslateTransform lyTr = new TranslateTransform();
 
@@ -306,7 +308,9 @@ partial class Island : Window
         };
         Deactivated += delegate { if (editing) EndEdit(false); };
 
-        tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Visible = true, Text = "WinIsle" };
+        appIcon = System.Drawing.Icon.ExtractAssociatedIcon(Forms.Application.ExecutablePath);
+        if (appIcon == null) throw new InvalidOperationException("Ikon WinIsle tidak ditemukan pada executable.");
+        tray = new Forms.NotifyIcon { Icon = appIcon, Visible = true, Text = "WinIsle" };
         Forms.ContextMenuStrip cm = new Forms.ContextMenuStrip();
         cm.Items.Add("Ke belakang / ke depan (Ctrl+Alt+I)", null, delegate { ToggleBack(); });
         cm.Items.Add("Keluar", null, delegate { ExitApp(); });

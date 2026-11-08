@@ -175,11 +175,12 @@ partial class Island
     void UpdateTabs()
     {
         tabTitle.Text = tabNames[currentTab];
-        for (int i = 0; i < dots.Length; i++)
+        for (int i = 0; i < tabIconCircles.Length; i++)
         {
             bool on = (i == currentTab);
-            dots[i].Background = on ? (Brush)Accent : (Brush)Rgb(110, 110, 110);
-            dots[i].Width = on ? 8 : 5; dots[i].Height = on ? 8 : 5;
+            tabIconCircles[i].Background = on ? (Brush)Accent : (Brush)Rgb(38, 38, 38);
+            tabIconCircles[i].BorderBrush = on ? (Brush)Accent : (Brush)Rgb(110, 110, 110);
+            ((TextBlock)tabIconCircles[i].Child).Foreground = on ? Brushes.White : Rgb(180, 180, 180);
         }
     }
 

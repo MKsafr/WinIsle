@@ -7,7 +7,7 @@ if not exist "%FW%\csc.exe" goto nocsc
 
 taskkill /f /im WinIsle.exe >nul 2>&1
 
-"%FW%\csc.exe" /nologo /optimize+ /codepage:65001 /target:winexe /out:WinIsle.exe ^
+"%FW%\csc.exe" /nologo /optimize+ /codepage:65001 /target:winexe /win32icon:WinIsle.ico /out:WinIsle.exe ^
  /r:"%FW%\WPF\PresentationFramework.dll" /r:"%FW%\WPF\PresentationCore.dll" /r:"%FW%\WPF\WindowsBase.dll" ^
  /r:System.Xaml.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll ^
  App\Program.cs Interop\Audio.cs ^

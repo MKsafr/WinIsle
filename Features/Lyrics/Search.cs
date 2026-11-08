@@ -411,14 +411,25 @@ partial class Island
         Match titleArtistMatch = Regex.Match(rawTrack, @"^\s*(.+?)\s+[-\u2013\u2014|]\s+(.+)$");
         string embeddedArtist = titleArtistMatch.Success ? titleArtistMatch.Groups[1].Value.Trim() : "";
         string embeddedTrack = titleArtistMatch.Success ? titleArtistMatch.Groups[2].Value.Trim() : "";
-        if (titleArtistMatch.Success &&
-            (artistPrefix.Length == 0 || Norm(artistPrefix).IndexOf(Norm(titleArtistMatch.Groups[1].Value), StringComparison.Ordinal) >= 0 || features.Count > 0))
+        bool matchesLeadingArtist = artistPrefix.Length == 0 ||
+            Norm(artistPrefix).IndexOf(Norm(embeddedArtist), StringComparison.Ordinal) >= 0;
+        bool matchesTrailingArtist = artistPrefix.Length > 0 &&
+            Norm(artistPrefix).IndexOf(Norm(embeddedTrack), StringComparison.Ordinal) >= 0;
+        if (titleArtistMatch.Success && matchesTrailingArtist && !matchesLeadingArtist)
+        {
+            titleArtist = embeddedTrack;
+            rawTrack = embeddedArtist;
+        }
+        else if (titleArtistMatch.Success && (matchesLeadingArtist || features.Count > 0))
         {
             titleArtist = embeddedArtist;
             rawTrack = embeddedTrack;
         }
         else if (titleArtistMatch.Success)
             AddLQuery(queries, embeddedTrack, embeddedArtist);
+
+        if (titleArtistMatch.Success && artistPrefix.Length == 0)
+            AddLQuery(queries, embeddedArtist, embeddedTrack);
 
         List<string> artistCandidates = new List<string>();
         if (features.Count > 0 && titleArtist.Length > 0)

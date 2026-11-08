@@ -33,6 +33,7 @@ partial class Island
         KillMedia();
         try { if (pop != null) pop.Close(); } catch { }
         try { tray.Visible = false; tray.Dispose(); } catch { }
+        if (appIcon != null) appIcon.Dispose();
     }
 
     IntPtr Hook(IntPtr h, int m, IntPtr w, IntPtr l, ref bool handled)

@@ -12,19 +12,25 @@ partial class Island
 {
     UIElement BuildScanTextPage()
     {
-        scanTextStatus = T("Pilih area layar. Hasil bisa dikoreksi sebelum disalin.", 0.65, 10.5);
+        TextBlock scanTextHint = T("Alt+Shift+O untuk memilih area layar. Hasil bisa dikoreksi sebelum disalin.", 0.8, 10.5);
+        scanTextHint.TextWrapping = TextWrapping.Wrap;
+        scanTextHint.TextAlignment = TextAlignment.Center;
+        scanTextHint.Margin = new Thickness(2, 3, 2, 2);
+
+        scanTextStatus = T("Siap memindai.", 0.55, 9.5);
         scanTextStatus.TextWrapping = TextWrapping.Wrap;
         scanTextStatus.TextAlignment = TextAlignment.Center;
-        scanTextStatus.Margin = new Thickness(2, 4, 2, 4);
+        scanTextStatus.Margin = new Thickness(2, 1, 2, 2);
 
         btnScanText = SB("Pilih area layar", delegate { BeginTextScan(); });
         btnScanText.HorizontalAlignment = HorizontalAlignment.Center;
+        btnScanText.ToolTip = "Atau tekan Alt+Shift+O untuk memilih area layar.";
 
         scanTextOutput = new TextBox
         {
-            Height = 108,
-            Margin = new Thickness(2, 5, 2, 3),
-            Padding = new Thickness(6),
+            Height = 96,
+            Margin = new Thickness(2, 4, 2, 2),
+            Padding = new Thickness(7),
             IsReadOnly = false,
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
@@ -53,7 +59,7 @@ partial class Island
         btnCopyScanText.HorizontalAlignment = HorizontalAlignment.Center;
         btnCopyScanText.IsEnabled = false;
 
-        return Col(scanTextStatus, btnScanText, scanTextOutput, btnCopyScanText);
+        return Col(scanTextHint, scanTextStatus, btnScanText, scanTextOutput, btnCopyScanText);
     }
 
     void BeginTextScan()
