@@ -1,6 +1,6 @@
 # WinIsle
 
-Widget "island" mengambang untuk Windows. WinIsle menempel di tepi kanan layar dan menampilkan jam, media yang sedang diputar, lirik, timer, kalender Indonesia, dan beberapa alat kecil lainnya, semuanya dalam satu pil yang bisa dibuka.
+Widget "island" mengambang untuk Windows. WinIsle menempel di tepi kanan layar dan menampilkan jam, media yang sedang diputar, lirik, timer, mixer volume, scan teks, kalender, dan beberapa alat kecil lainnya, semuanya dalam satu pil yang bisa dibuka.
 
 Proyek ini adalah adaptasi Windows dari ide yang dipopulerkan oleh **vorssaint** di macOS. Dibuat untuk pemakaian pribadi, dan sebagian kodenya dikembangkan dengan bantuan AI.
 
