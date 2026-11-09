@@ -17,8 +17,10 @@ partial class Island
         PresentationSource src = PresentationSource.FromVisual(this);
         if (src == null) return;
         Point d = src.CompositionTarget.TransformFromDevice.Transform(new Point(p.X, p.Y));
-        double w = open ? OW : CW, h = open ? OH : collH, m = open ? 14 : 4;
-        double x0 = Left + WW - w - m, x1 = Left + WW + m, y0 = Top + (WH - h) / 2 - m, y1 = Top + (WH + h) / 2 + m;
+        double w = (open ? OW : CW) * renderScale, h = (open ? OH : collH) * renderScale, m = (open ? 14 : 4) * renderScale;
+        double windowW = WW * renderScale, windowH = WH * renderScale;
+        double x0 = Left + windowW - w - m, x1 = Left + windowW + m;
+        double y0 = Top + (windowH - h) / 2 - m, y1 = Top + (windowH + h) / 2 + m;
         bool inside = d.X >= x0 && d.X <= x1 && d.Y >= y0 && d.Y <= y1;
         if (editing && !inside && (GetAsyncKeyState(0x01) & 0x8000) != 0) EndEdit(false); // klik di luar island
         if (isDragging || editing) inside = true;
@@ -49,12 +51,12 @@ partial class Island
     {
         if (o == open) return;
         open = o; outSince = DateTime.MinValue;
-        isl.CornerRadius = new CornerRadius(o ? 22 : 12, 0, 0, o ? 22 : 12);
+        isl.CornerRadius = new CornerRadius((o ? 22 : 12) * renderScale, 0, 0, (o ? 22 : 12) * renderScale);
         UpdateBodyShape();
         CubicEase ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         TimeSpan du = TimeSpan.FromMilliseconds(240);
-        isl.BeginAnimation(WidthProperty, new DoubleAnimation(o ? OW : CW, du) { EasingFunction = ease });
-        isl.BeginAnimation(HeightProperty, new DoubleAnimation(o ? OH : collH, du) { EasingFunction = ease });
+        isl.BeginAnimation(WidthProperty, new DoubleAnimation((o ? OW : CW) * renderScale, du) { EasingFunction = ease });
+        isl.BeginAnimation(HeightProperty, new DoubleAnimation((o ? OH : collH) * renderScale, du) { EasingFunction = ease });
         RefreshClock();
         if (o)
         {

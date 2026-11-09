@@ -5,6 +5,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Management;
 using Forms = System.Windows.Forms;
 
 partial class Island
@@ -19,6 +20,44 @@ partial class Island
     long netPrevRx = -1, netPrevTx;
     DateTime netPrevAt = DateTime.MinValue;
     double netDown, netUp;
+    DateTime vramUpdatedAt = DateTime.MinValue;
+    bool vramWarningLogged;
+
+    void UpdateVram()
+    {
+        DateTime now = DateTime.UtcNow;
+        if (vramUpdatedAt != DateTime.MinValue && (now - vramUpdatedAt).TotalSeconds < 30) return;
+        vramUpdatedAt = now;
+        try
+        {
+            ulong totalBytes = 0;
+            using (ManagementObjectSearcher searcher = new ManagementObjectSearcher(
+                "SELECT AdapterRAM, VideoMemoryType FROM Win32_VideoController"))
+            using (ManagementObjectCollection adapters = searcher.Get())
+            {
+                foreach (ManagementObject adapter in adapters)
+                using (adapter)
+                {
+                    if (adapter["AdapterRAM"] == null || adapter["VideoMemoryType"] == null) continue;
+                    uint memoryType = Convert.ToUInt32(adapter["VideoMemoryType"]);
+                    uint adapterRam = Convert.ToUInt32(adapter["AdapterRAM"]);
+                    if (memoryType == 3 && adapterRam > 0 && adapterRam < uint.MaxValue)
+                        totalBytes += adapterRam;
+                }
+            }
+            tVram.Text = totalBytes == 0 ? "VRAM dedicated  tidak tersedia" :
+                "VRAM dedicated  " + (totalBytes / 1073741824.0).ToString("0.0", IC) + " GB";
+        }
+        catch (Exception ex)
+        {
+            tVram.Text = "VRAM dedicated  tidak tersedia";
+            if (!vramWarningLogged)
+            {
+                Prog.Log("Tidak dapat membaca kapasitas VRAM dedicated: " + ex);
+                vramWarningLogged = true;
+            }
+        }
+    }
 
     UIElement BuildBatteryCard()
     {
@@ -95,7 +134,7 @@ partial class Island
 
 
     // =====================================================================
-    //  TIAP DETIK: jam, CPU, RAM, disk, baterai
+    //  TIAP DETIK: jam, CPU, RAM, VRAM, disk, baterai
     // =====================================================================
     void Sec()
     {
@@ -116,6 +155,7 @@ partial class Island
         if (!open || currentTab != 7) return;
 
         pCpu.Value = cpuPct; tCpu.Text = "CPU  " + (int)Math.Round(cpuPct) + "%";
+        UpdateVram();
         MEM m = new MEM(); m.dwLength = (uint)Marshal.SizeOf(typeof(MEM));
         if (GlobalMemoryStatusEx(ref m))
         {

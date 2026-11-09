@@ -87,7 +87,7 @@ partial class Island
     {
         bool showScanTextMessage = scanTextMiniMessage.Length > 0;
         string bt = alarmOn ? AlarmMsg : showScanTextMessage ? scanTextMiniMessage : mediaColl;
-        string cd = alarmOn || showScanTextMessage ? "" : CountdownText();
+        string cd = alarmOn || showScanTextMessage || timerPopOn ? "" : CountdownText();
         bool hasCd = cd.Length > 0;
         string key = bt + "\u0001" + (hasCd ? "1" : "0");
         if (key != titleShown) { titleShown = key; cdShown = ""; if (bt.Length > 0 || hasCd) SetupTitle(bt, hasCd); }
@@ -98,7 +98,7 @@ partial class Island
         collH = show ? CHT : CH;
         titleHost.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         if (!open)
-            isl.BeginAnimation(HeightProperty, new DoubleAnimation(collH, TimeSpan.FromMilliseconds(260)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+            isl.BeginAnimation(HeightProperty, new DoubleAnimation(collH * renderScale, TimeSpan.FromMilliseconds(260)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
     }
 
     // ---------- Tujuh halaman (ukuran ringkas) ----------
@@ -225,14 +225,18 @@ partial class Island
         presets.HorizontalAlignment = HorizontalAlignment.Center;
         btnPause = SB("\u25B6", delegate { StartPause(); }); btnPause.ToolTip = "Mulai timer";
         btnPause.FontSize = 22; btnPause.Padding = new Thickness(18, 8, 18, 8); btnPause.MinWidth = 62; btnPause.MinHeight = 48;
-        Button btnCancelTimer = SB("\u25A0", delegate { CancelTimer(); }); btnCancelTimer.ToolTip = "Hentikan timer";
+        btnCancelTimer = SB("\u25A0", delegate { CancelTimer(); }); btnCancelTimer.ToolTip = "Hentikan timer";
         btnCancelTimer.FontSize = 22; btnCancelTimer.Padding = new Thickness(18, 8, 18, 8); btnCancelTimer.MinWidth = 62; btnCancelTimer.MinHeight = 48;
         StackPanel tctl = Row(btnPause, btnCancelTimer);
         tctl.HorizontalAlignment = HorizontalAlignment.Center; tctl.Margin = new Thickness(0, 6, 0, 0);
+        btnTimerPop = SB("\u2750 Pop-out timer", delegate { ToggleTimerPop(); });
+        btnTimerPop.HorizontalAlignment = HorizontalAlignment.Center;
+        btnTimerPop.Margin = new Thickness(0, 4, 0, 0);
         btnStopAlarm = SB("\U0001F515 Matikan alarm", delegate { StopAlarm(); });
         btnStopAlarm.Background = Accent; btnStopAlarm.HorizontalAlignment = HorizontalAlignment.Center; btnStopAlarm.Margin = new Thickness(0, 6, 0, 0);
         btnStopAlarm.Visibility = Visibility.Collapsed;
-        pages[2] = Col(tTimer, presets, tctl, btnStopAlarm);
+        pages[2] = Col(tTimer, presets, tctl, btnTimerPop, btnStopAlarm);
+        SetPauseBtn();
 
         // 5: Scan Teks
         pages[5] = BuildScanTextPage();
@@ -246,12 +250,12 @@ partial class Island
         pages[6] = Col(clipHint, clipScroll, clipClear);
 
         // 7: Sistem
-        tCpu = T("CPU", 1, 12); tRam = T("RAM", 1, 12); tDisk = T("", 0.7, 10.5);
+        tCpu = T("CPU", 1, 12); tRam = T("RAM", 1, 12); tVram = T("VRAM dedicated", 1, 10.5); tDisk = T("", 0.7, 10.5);
         pCpu = NewBar(); pRam = NewBar();
         tNetLbl = T("Internet (\u2193 unduh, \u2191 unggah)", 0.6, 10.5); tNetLbl.Margin = new Thickness(0, 4, 0, 1);
         tNet = T("", 0.9, 12);
         tNet.Margin = new Thickness(0, 0, 0, 4); tDisk.Margin = new Thickness(0, 0, 0, 8);
-        StackPanel sys = Col(tCpu, pCpu, tRam, pRam, tNetLbl, tNet, tDisk, BuildBatteryCard());
+        StackPanel sys = Col(tCpu, pCpu, tRam, pRam, tVram, tNetLbl, tNet, tDisk, BuildBatteryCard());
         sys.Margin = new Thickness(0, 4, 0, 0);
         pages[7] = sys;
 
@@ -259,15 +263,32 @@ partial class Island
         btnAwake = SB("\u2615 Keep awake: mati", delegate { ToggleAwake(); });
         btnAuto = SB("", delegate { ToggleAutostart(); });
         btnGlow = SB("", delegate { ToggleGlow(); });
+        btnBack = SB("\u2B07 Ke belakang", delegate { ToggleBack(); });
+        scaleButtons = new Button[WidgetScales.Length];
+        StackPanel scaleChoices = Row();
+        for (int i = 0; i < WidgetScales.Length; i++)
+        {
+            int index = i;
+            Button scaleButton = SB(WidgetScaleLabel(WidgetScales[i]), delegate { SetWidgetScale(WidgetScales[index]); });
+            scaleButton.Width = 36; scaleButton.FontSize = 9;
+            scaleButton.Padding = new Thickness(1, 2, 1, 2); scaleButton.Margin = new Thickness(1);
+            scaleButton.ToolTip = "Ukuran widget " + WidgetScaleLabel(WidgetScales[i]);
+            scaleButtons[i] = scaleButton;
+            scaleChoices.Children.Add(scaleButton);
+        }
+        scaleChoices.HorizontalAlignment = HorizontalAlignment.Center;
+        RefreshScaleButtons();
         RefreshGlowBtn();
         RefreshAutoBtn();
+        RefreshBackButton();
 
         TextBlock versionLabel = T("Versi " + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3), 0.45, 9);
         versionLabel.HorizontalAlignment = HorizontalAlignment.Center;
         StackPanel ctl = Col(
             btnAwake,
             SB("\U0001F512 Kunci layar", delegate { LockWorkStation(); }),
-            SB("\u2B07 Ke belakang", delegate { ToggleBack(); }),
+            btnBack,
+            scaleChoices,
             btnAuto,
             btnGlow,
             SB("\u2716 Keluar", delegate { ExitApp(); }),

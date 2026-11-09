@@ -32,6 +32,7 @@ partial class Island
         try { UnregisterHotKey(hwnd, 1); UnregisterHotKey(hwnd, 2); RemoveClipboardFormatListener(hwnd); } catch { }
         KillMedia();
         try { if (pop != null) pop.Close(); } catch { }
+        try { if (timerPop != null) timerPop.Close(); } catch { }
         try { tray.Visible = false; tray.Dispose(); } catch { }
         if (appIcon != null) appIcon.Dispose();
     }
@@ -59,9 +60,16 @@ partial class Island
     void ToggleBack()
     {
         back = !back;
+        RefreshBackButton();
         if (back) { SetOpen(false); Topmost = false; SetWindowPos(hwnd, (IntPtr)1, 0, 0, 0, 0, 0x13); }
         else { Topmost = true; SetWindowPos(hwnd, (IntPtr)(-1), 0, 0, 0, 0, 0x13); }
     }
 
+    void RefreshBackButton()
+    {
+        if (btnBack == null) return;
+        btnBack.Content = back ? "\u2B06 Ke depan" : "\u2B07 Ke belakang";
+        btnBack.ToolTip = back ? "Bawa WinIsle ke depan" : "Pindahkan WinIsle ke belakang";
+    }
 
 }

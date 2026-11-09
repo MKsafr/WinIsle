@@ -70,6 +70,7 @@ partial class Island : Window
     Border isl, seekFill, seekThumb, titleHost;
     Canvas titleCanvas;
     Grid miniRoot, expRoot, seekBar, shell;
+    Button[] scaleButtons;
     Canvas bodyCanvas;
     System.Windows.Shapes.Path bodyShape;
     System.Windows.Media.Effects.DropShadowEffect glowEffect;
@@ -95,9 +96,10 @@ partial class Island : Window
     TextAlignment popAlignmentSelection = TextAlignment.Center;
     bool popSettingsEditing;
     TextBlock popSettingsStatus;
-    Button btnPlay, btnAwake, btnAuto, btnGlow, calTitleBtn, btnLyricRefresh, btnLyricSettings;
+    Button btnPlay, btnAwake, btnBack, btnAuto, btnGlow, calTitleBtn, btnLyricRefresh, btnLyricSettings, btnTimerPop;
+    Button btnCancelTimer;
     TextBlock clockFull, tabTitle, topClock, botClock, titleText;
-    TextBlock tTitle, tArtist, tPos, tDur, lStat, lOff, lPlainT, lHint, tCpu, tRam, tDisk, tBat;
+    TextBlock tTitle, tArtist, tPos, tDur, lStat, lOff, lPlainT, lHint, tCpu, tRam, tVram, tDisk, tBat;
     TextBlock[] ly = new TextBlock[5];
     StackPanel lSync, clipList;
     ScrollViewer lPlain;
@@ -112,12 +114,13 @@ partial class Island : Window
     string lkey = "";
     string curTi = "", curAlbum = "";
     bool lsynced, playingNow, open, back, awake, glowEnabled, isDragging, quitting, clipDirty = true, lyricConnectionError;
-    double basePos = -1, offset, curDur, dragRatio, cpuPct, collH = CH, wheelAcc;
+    double basePos = -1, offset, curDur, dragRatio, cpuPct, collH = CH, wheelAcc, widgetScale = 1, renderScale = 1;
     string titleShown = "";
     bool titleOn;
     DateTime lastWheel = DateTime.MinValue, lastWheelEvt = DateTime.MinValue;
     DateTime baseAt = DateTime.Now, seekHoldUntil = DateTime.MinValue, outSince = DateTime.MinValue;
-    DateTime alertUntil = DateTime.MinValue, endT = DateTime.MinValue, calToday = DateTime.Today, mediaStarted = DateTime.MinValue;
+    DateTime alertUntil = DateTime.MinValue, calToday = DateTime.Today, mediaStarted = DateTime.MinValue;
+    long timerDeadline;
     int curIdx = -2, currentTab, calY, calM, clipTries, mediaFails;
     long prevTot, prevIdle;
     List<string> hist = new List<string>();
@@ -131,9 +134,11 @@ partial class Island : Window
     Button btnRom, btnPop;
     int romKind;                       // 0 = tidak perlu, 1 = Jepang, 2 = Korea
     bool romOn, popOn;                 // romOn = pilihan pengguna, diingat selama aplikasi berjalan
+    bool timerPopOn;
     string plainSrc = "", plainRom = "";
     int popIdx = -2;
     PopLyric pop;
+    PopTimer timerPop;
     TextBlock dateFull;
     const string AlarmMsg = "Timer telah selesai";
     bool tPaused, editing; TimeSpan tLeft; volatile bool alarmOn;
@@ -170,7 +175,7 @@ partial class Island : Window
         Point p = isl.TransformToAncestor(shell).Transform(new Point(0, 0));
         if (bodyShape == null) return;
 
-        const double extW = 28, extH = 14;
+        double extW = 28 * renderScale, extH = 14 * renderScale;
         double r = isl.CornerRadius.TopLeft;
         const double k = 0.55228475;
         StreamGeometry geometry = new StreamGeometry();
@@ -263,7 +268,9 @@ partial class Island : Window
     {
         WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent;
         Topmost = true; ShowInTaskbar = false; ShowActivated = false; ResizeMode = ResizeMode.NoResize;
-        Width = WW; Height = WH; Title = "WinIsle";
+        widgetScale = LoadWidgetScale();
+        renderScale = EffectiveWidgetScale();
+        Width = WW * renderScale; Height = WH * renderScale; Title = "WinIsle";
         Reposition();
         try { idCulture = new CultureInfo("id-ID"); } catch { idCulture = CultureInfo.CurrentCulture; }
         calY = DateTime.Today.Year; calM = DateTime.Today.Month;
@@ -274,12 +281,12 @@ partial class Island : Window
         BuildPages();
         BuildExpanded();
 
-        Grid root = new Grid();
+        Grid root = new Grid { LayoutTransform = new ScaleTransform(renderScale, renderScale) };
         root.Children.Add(miniRoot);
         root.Children.Add(expRoot);
         glowEffect = new System.Windows.Media.Effects.DropShadowEffect
         {
-            Color = Colors.White, BlurRadius = 12, ShadowDepth = 0, Opacity = 0.35
+            Color = Colors.White, BlurRadius = 12 * renderScale, ShadowDepth = 0, Opacity = 0.35
         };
         bodyCanvas = new Canvas { IsHitTestVisible = false };
         bodyShape = new System.Windows.Shapes.Path
@@ -289,8 +296,9 @@ partial class Island : Window
         bodyCanvas.Children.Add(bodyShape);
         isl = new Border
         {
-            Background = Brushes.Transparent, CornerRadius = new CornerRadius(12, 0, 0, 12), Margin = new Thickness(12, 12, 0, 12),
-            Width = CW, Height = CH,
+            Background = Brushes.Transparent, CornerRadius = new CornerRadius(12 * renderScale, 0, 0, 12 * renderScale),
+            Margin = new Thickness(12 * renderScale, 12 * renderScale, 0, 12 * renderScale),
+            Width = CW * renderScale, Height = CH * renderScale,
             HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, ClipToBounds = true,
             Child = root
         };
@@ -340,7 +348,9 @@ partial class Island : Window
     void Reposition()
     {
         Rect wa = SystemParameters.WorkArea;
-        double l = wa.Right - WW, t = wa.Top + (wa.Height - WH) / 2;
+        double effectiveScale = EffectiveWidgetScale();
+        if (effectiveScale != renderScale) ApplyRenderedScale(effectiveScale);
+        double l = wa.Right - WW * renderScale, t = wa.Top + (wa.Height - WH * renderScale) / 2;
         if (Left != l) Left = l;
         if (Top != t) Top = t;
     }
@@ -350,6 +360,7 @@ partial class Island : Window
         Reposition();
         if (!back && hwnd != IntPtr.Zero) SetWindowPos(hwnd, (IntPtr)(-1), 0, 0, 0, 0, 0x13);
         if (popOn && pop != null) { pop.Place(); pop.Raise(); }
+        if (timerPopOn && timerPop != null) { timerPop.Place(); timerPop.Raise(); }
     }
 
 

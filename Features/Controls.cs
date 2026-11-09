@@ -14,6 +14,105 @@ partial class Island
     // =====================================================================
     //  KONTROL
     // =====================================================================
+    static readonly double[] WidgetScales = { 0.5, 0.75, 1, 1.5, 2 };
+
+    static string WidgetScaleLabel(double scale)
+    {
+        return scale.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "x";
+    }
+
+    double EffectiveWidgetScale()
+    {
+        Rect workArea = SystemParameters.WorkArea;
+        double fitScale = Math.Min(workArea.Width / WW, workArea.Height / WH);
+        return Math.Min(widgetScale, Math.Max(0.01, fitScale));
+    }
+
+    double LoadWidgetScale()
+    {
+        try
+        {
+            using (Win32.RegistryKey key = Win32.Registry.CurrentUser.OpenSubKey(@"Software\WinIsle"))
+            {
+                if (key == null) return 1;
+                object configuredScale = key.GetValue("WidgetScale");
+                if (configuredScale == null) return 1;
+                double scale;
+                if (!double.TryParse(Convert.ToString(configuredScale, System.Globalization.CultureInfo.InvariantCulture),
+                    System.Globalization.NumberStyles.AllowDecimalPoint, System.Globalization.CultureInfo.InvariantCulture, out scale))
+                {
+                    Prog.Log("Pengaturan skala widget tidak valid; menggunakan skala 1x.");
+                    return 1;
+                }
+                foreach (double supportedScale in WidgetScales)
+                    if (scale == supportedScale) return scale;
+                Prog.Log("Pengaturan skala widget tidak valid; menggunakan skala 1x.");
+                return 1;
+            }
+        }
+        catch (Exception ex)
+        {
+            Prog.Log(ex.ToString());
+            return 1;
+        }
+    }
+
+    void SetWidgetScale(double scale)
+    {
+        bool supported = false;
+        foreach (double supportedScale in WidgetScales)
+            if (scale == supportedScale) { supported = true; break; }
+        if (!supported || scale == widgetScale) return;
+
+        try
+        {
+            using (Win32.RegistryKey key = Win32.Registry.CurrentUser.CreateSubKey(@"Software\WinIsle"))
+            {
+                if (key == null) throw new InvalidOperationException("Tidak dapat membuka pengaturan WinIsle di registry.");
+                key.SetValue("WidgetScale", scale.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture), Win32.RegistryValueKind.String);
+            }
+        }
+        catch (Exception ex)
+        {
+            Prog.Log(ex.ToString());
+            MessageBox.Show("Pengaturan skala widget tidak dapat disimpan:\n" + ex.Message, "WinIsle", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        widgetScale = scale;
+        ApplyRenderedScale(EffectiveWidgetScale());
+        Reposition();
+        RefreshScaleButtons();
+    }
+
+    void ApplyRenderedScale(double scale)
+    {
+        renderScale = scale;
+        Width = WW * renderScale;
+        Height = WH * renderScale;
+        if (isl == null) return;
+        isl.BeginAnimation(WidthProperty, null);
+        isl.BeginAnimation(HeightProperty, null);
+        ((Grid)isl.Child).LayoutTransform = new System.Windows.Media.ScaleTransform(renderScale, renderScale);
+        isl.Margin = new Thickness(12 * renderScale, 12 * renderScale, 0, 12 * renderScale);
+        isl.CornerRadius = new CornerRadius((open ? 22 : 12) * renderScale, 0, 0, (open ? 22 : 12) * renderScale);
+        isl.Width = (open ? OW : CW) * renderScale;
+        isl.Height = (open ? OH : collH) * renderScale;
+        if (glowEffect != null) glowEffect.BlurRadius = 12 * renderScale;
+        UpdateBodyShape();
+    }
+
+    void RefreshScaleButtons()
+    {
+        if (scaleButtons == null) return;
+        for (int i = 0; i < scaleButtons.Length; i++)
+        {
+            bool selected = WidgetScales[i] == widgetScale;
+            scaleButtons[i].Background = selected ? Accent : Rgb(38, 38, 38);
+            scaleButtons[i].Opacity = selected ? 1 : 0.72;
+        }
+    }
+
     void ToggleAwake()
     {
         awake = !awake;

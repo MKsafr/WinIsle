@@ -12,13 +12,13 @@ WinIsle memiliki sembilan tab. Pindah tab dengan tombol ▲ / ▼ atau ikon fitu
 | --- | --- |
 | Musik | Informasi lagu, progres, dan kontrol pemutaran |
 | Lirik | Lirik tersinkron, offset, romaji/romanisasi, dan pop-out yang dapat diatur |
-| Timer | Preset timer dan alarm |
+| Timer | Preset timer, alarm, dan pop-out timer dengan kontrol jeda/berhenti |
 | Suara | Volume utama dan volume per aplikasi |
 | Kalender | Kalender Indonesia |
 | Scan Teks | Pilih area layar dengan `Alt+Shift+O`, kenali teks secara lokal, lalu salin hasilnya |
 | Clipboard | Riwayat salinan dan salin ulang |
-| Sistem | CPU, RAM, jaringan, disk, dan baterai |
-| Kontrol | Keep-awake, kunci layar, autostart, glow, dan keluar |
+| Sistem | CPU, RAM, VRAM dedicated, jaringan, disk, dan baterai |
+| Kontrol | Keep-awake, skala widget, kunci layar, autostart, glow, dan keluar |
 
 Saat island ciut, jam dan judul lagu ditampilkan vertikal. Gunakan `Ctrl+Alt+I` atau ikon tray untuk memindahkan island ke depan atau belakang jendela lain.
 
@@ -30,7 +30,7 @@ Saat island ciut, jam dan judul lagu ditampilkan vertikal. Gunakan `Ctrl+Alt+I` 
 
 ## Download dan menjalankan
 
-1. [Download WinIsle versi terbaru (.zip)](https://github.com/MKsafr/WinIsle/releases/latest/download/WinIsle-latest.zip).
+1. Buka [halaman rilis WinIsle terbaru](https://github.com/MKsafr/WinIsle/releases/latest), lalu unduh ZIP yang tersedia. Tautan langsung tidak stabil karena nama aset ZIP menyertakan nomor versi.
 2. Ekstrak ZIP ke folder pilihan, misalnya `Documents\WinIsle`.
 3. Buka folder hasil ekstrak, lalu jalankan `WinIsle.exe`.
 4. Biarkan `media.ps1`, `kana.ps1`, dan `scantext.ps1` tetap di folder yang sama dengan executable agar fitur media, romanisasi, dan Scan Teks dapat digunakan.

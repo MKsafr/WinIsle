@@ -22,9 +22,40 @@ partial class Island
 
     // Angka diketik dari kanan (seperti timer HP): 1 5 -> 00:00:15, lalu 0 0 -> 00:15:00
     string FmtDig() { string d = dig.PadLeft(6, '0'); return d.Substring(0, 2) + ":" + d.Substring(2, 2) + ":" + d.Substring(4, 2); }
-    void ShowIdle() { tTimer.Text = FmtDig(); }
+    void ShowIdle() { tTimer.Text = FmtDig(); RefreshTimerControls(); }
     double DigSeconds() { string d = dig.PadLeft(6, '0'); return N(d.Substring(0, 2)) * 3600.0 + N(d.Substring(2, 2)) * 60.0 + N(d.Substring(4, 2)); }
-    bool CanEdit() { return !alarmOn && !tPaused && endT == DateTime.MinValue; }
+    bool CanEdit() { return !alarmOn && !tPaused && timerDeadline == 0; }
+    bool TimerActive() { return tPaused || timerDeadline != 0; }
+    double TimerRemainingSeconds()
+    {
+        return timerDeadline == 0 ? 0 :
+            Math.Max(0, (timerDeadline - System.Diagnostics.Stopwatch.GetTimestamp()) /
+                (double)System.Diagnostics.Stopwatch.Frequency);
+    }
+
+    void ToggleTimerPop()
+    {
+        if (timerPop == null)
+            timerPop = new PopTimer(StartPause, CancelTimer, StopAlarm, delegate
+            {
+                timerPopOn = false;
+                btnTimerPop.Background = Rgb(38, 38, 38);
+                UpdateCollapsed();
+                RefreshTimerControls();
+            });
+
+        timerPopOn = !timerPopOn;
+        if (timerPopOn)
+        {
+            timerPop.Show();
+            timerPop.Place();
+            timerPop.Raise();
+        }
+        else timerPop.Hide();
+        btnTimerPop.Background = timerPopOn ? Accent : Rgb(38, 38, 38);
+        UpdateCollapsed();
+        RefreshTimerControls();
+    }
 
     void AddDigit(int dgt)
     {
@@ -34,7 +65,7 @@ partial class Island
 
     string CountdownText()
     {
-        if (endT != DateTime.MinValue) return Hms(Math.Ceiling((endT - DateTime.Now).TotalSeconds));
+        if (timerDeadline != 0) return Hms(Math.Ceiling(TimerRemainingSeconds()));
         if (tPaused) return Hms(Math.Ceiling(tLeft.TotalSeconds));
         return "";
     }
@@ -66,15 +97,31 @@ partial class Island
 
     void SetPauseBtn()
     {
-        btnPause.Content = (endT != DateTime.MinValue) ? "\u23F8" : "\u25B6";
-        btnPause.ToolTip = tPaused ? "Lanjutkan timer" : (endT != DateTime.MinValue ? "Jeda timer" : "Mulai timer");
+        btnPause.Content = (timerDeadline != 0) ? "\u23F8" : "\u25B6";
+        btnPause.ToolTip = tPaused ? "Lanjutkan timer" : (timerDeadline != 0 ? "Jeda timer" : "Mulai timer");
+        RefreshTimerControls();
+    }
+
+    void RefreshTimerControls()
+    {
+        if (btnPause == null) return;
+        bool canPause = !alarmOn && (TimerActive() || DigSeconds() > 0);
+        bool canStop = TimerActive() && !alarmOn;
+        btnPause.IsEnabled = canPause;
+        btnCancelTimer.IsEnabled = canStop;
+        btnPause.Opacity = canPause ? 1 : 0.45;
+        btnCancelTimer.Opacity = canStop ? 1 : 0.45;
+        if (timerPop != null)
+            timerPop.Update(TimerActive() ? CountdownText() : (DigSeconds() > 0 ? FmtDig() : ""),
+                timerDeadline != 0, tPaused, alarmOn, DigSeconds() > 0);
     }
 
     void StartSec(double sec)
     {
         StopAlarm();
         tPaused = false; tTimer.Opacity = 1; dig = "";
-        endT = DateTime.Now.AddSeconds(sec);
+        timerDeadline = System.Diagnostics.Stopwatch.GetTimestamp() +
+            (long)Math.Ceiling(sec * System.Diagnostics.Stopwatch.Frequency);
         SetPauseBtn();
         TimerTick();
         ReleaseEdit();
@@ -91,16 +138,20 @@ partial class Island
     // Mulai (dari angka yang diketik) / Jeda / Lanjut
     void StartPause()
     {
+        if (alarmOn) return;
         if (tPaused)
         {
-            endT = DateTime.Now.Add(tLeft); tPaused = false; tTimer.Opacity = 1;
+            timerDeadline = System.Diagnostics.Stopwatch.GetTimestamp() +
+                (long)Math.Ceiling(tLeft.TotalSeconds * System.Diagnostics.Stopwatch.Frequency);
+            tPaused = false; tTimer.Opacity = 1;
             SetPauseBtn(); TimerTick();
         }
-        else if (endT != DateTime.MinValue)
+        else if (timerDeadline != 0)
         {
-            tLeft = endT - DateTime.Now;
-            if (tLeft < TimeSpan.Zero) tLeft = TimeSpan.Zero;
-            endT = DateTime.MinValue; tPaused = true; tTimer.Opacity = 0.55;
+            double remaining = TimerRemainingSeconds();
+            if (remaining <= 0) { TimerTick(); return; }
+            tLeft = TimeSpan.FromSeconds(remaining);
+            timerDeadline = 0; tPaused = true; tTimer.Opacity = 0.55;
             SetPauseBtn();
             tTimer.Text = Hms(Math.Ceiling(tLeft.TotalSeconds));
             UpdateCollapsed();
@@ -114,27 +165,32 @@ partial class Island
 
     void CancelTimer()
     {
+        if (!TimerActive()) return;
         StopAlarm();
-        endT = DateTime.MinValue; tPaused = false; tTimer.Opacity = 1; dig = "";
+        timerDeadline = 0; tPaused = false; tTimer.Opacity = 1; dig = "";
         ShowIdle(); SetPauseBtn(); UpdateCollapsed();
     }
 
     void TimerTick()
     {
-        if (endT == DateTime.MinValue) return;
-        double sec = Math.Ceiling((endT - DateTime.Now).TotalSeconds);
+        if (timerDeadline == 0) { RefreshTimerControls(); return; }
+        double sec = Math.Ceiling(TimerRemainingSeconds());
         if (sec <= 0)
         {
-            endT = DateTime.MinValue; tTimer.Text = "Selesai!"; SetPauseBtn();
+            timerDeadline = 0; tTimer.Text = "Selesai!"; SetPauseBtn();
             StartAlarm();
+            RefreshTimerControls();
             SwitchTo(2); // buka tab Timer, tapi island tetap ciut: teks muncul di pil
         }
         else
         {
             string text = Hms(sec);
-            if (tTimer.Text == text) return;
-            tTimer.Text = text;
-            UpdateCollapsed();
+            if (tTimer.Text != text)
+            {
+                tTimer.Text = text;
+                UpdateCollapsed();
+            }
+            RefreshTimerControls();
         }
     }
 
@@ -145,6 +201,7 @@ partial class Island
         alarmOn = true;
         btnStopAlarm.Visibility = Visibility.Visible;
         UpdateCollapsed();
+        RefreshTimerControls();
         PauseAllMedia();   // jeda semua lagu/video yang sedang diputar supaya alarm langsung terdengar
         System.Threading.Thread th = new System.Threading.Thread(AlarmLoop);
         th.IsBackground = true; th.Start();
@@ -184,8 +241,9 @@ partial class Island
         if (!alarmOn) return;
         alarmOn = false;
         btnStopAlarm.Visibility = Visibility.Collapsed;
-        if (endT == DateTime.MinValue && !tPaused) { dig = ""; ShowIdle(); }
+        if (timerDeadline == 0 && !tPaused) { dig = ""; ShowIdle(); }
         UpdateCollapsed();
+        RefreshTimerControls();
     }
 
 

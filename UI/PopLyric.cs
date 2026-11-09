@@ -13,7 +13,8 @@ using System.Windows.Media.Animation;
 // Bagian jendela yang transparan menembus klik (tidak mengganggu aplikasi di bawahnya); hanya pilnya yang menangkap mouse.
 class PopLyric : Window
 {
-    const double PW = 400, PH = 64, Gap = 12, PadX = 9, PadY = 4;   // Gap = jarak pil dari bawah area kerja (di atas taskbar)
+    const double Gap = 12, PadX = 9, PadY = 4;
+    const double WidgetWidth = 400, WidgetHeight = 64;
     const double DefaultFontSize = 16, MinFontSize = 10, MaxFontSize = 48;
     const double DefaultMaxWidth = 400, MinMaxWidth = 100, MaxMaxWidth = 900, CornerRadiusSize = 11;
     const string SettingsPath = @"Software\WinIsle\PopLyric";
@@ -41,7 +42,7 @@ class PopLyric : Window
     {
         WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent;
         Topmost = true; ShowInTaskbar = false; ShowActivated = false; ResizeMode = ResizeMode.NoResize; Focusable = false;
-        Width = PW; Height = PH; Title = "WinIsle Lirik";
+        Title = "WinIsle Lirik";
         tb = new TextBlock
         {
             Foreground = Brushes.White, FontSize = DefaultFontSize, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap,
@@ -93,15 +94,18 @@ class PopLyric : Window
         double width = pill.ActualWidth;
         double height = pill.ActualHeight;
         if (width > 0 && height > 0)
+        {
             pill.Clip = new RectangleGeometry(new Rect(0, 0, width, height), CornerRadiusSize, CornerRadiusSize);
+        }
     }
 
     public void Place()
     {
         Rect wa = SystemParameters.WorkArea;
-        double maxPillWidth = Math.Min(maxWidth, wa.Width - 10);
-        double w = pillW > 0 ? Math.Min(pillW, maxPillWidth) : Math.Min(PW - 12, maxPillWidth);
-        double h = pillH > 0 ? pillH : PH;
+        double maxPillWidth = Math.Min(maxWidth, Math.Max(1, wa.Width - 10));
+        double w = pillW > 0 ? Math.Min(pillW, maxPillWidth) :
+            Math.Min(WidgetWidth - 12, maxPillWidth);
+        double h = pillH > 0 ? pillH : WidgetHeight;
         if (!moved && !defaultTopSet && pillH > 0)
         {
             userTop = wa.Bottom - Gap - h;
@@ -132,12 +136,12 @@ class PopLyric : Window
         curAnchorX = anchorX; curTop = top;
         if (Width != w) Width = w;
         if (Height != h) Height = h;
+        pill.Padding = new Thickness(PadX, PadY, PadX, PadY);
+        pill.CornerRadius = new CornerRadius(CornerRadiusSize);
         tb.MaxWidth = Math.Max(0, maxPillWidth - 2 * PadX);
         tb.MaxHeight = double.PositiveInfinity;
-        HorizontalAlignment alignment = textAlignment == TextAlignment.Left ? HorizontalAlignment.Left :
+        tb.HorizontalAlignment = textAlignment == TextAlignment.Left ? HorizontalAlignment.Left :
             (textAlignment == TextAlignment.Right ? HorizontalAlignment.Right : HorizontalAlignment.Center);
-        if (pill.HorizontalAlignment != alignment)
-            pill.HorizontalAlignment = alignment;
         if (Left != left) Left = left;
         if (Top != top) Top = top;
     }
@@ -169,6 +173,8 @@ class PopLyric : Window
         moved = false; defaultTopSet = false; userAnchorX = userTop = 0;
         tb.FontSize = fontSize;
         tb.TextAlignment = textAlignment;
+        pill.BeginAnimation(WidthProperty, null);
+        pill.BeginAnimation(HeightProperty, null);
         pill.ClearValue(WidthProperty); pill.ClearValue(HeightProperty);
         pillW = pillH = 0; sizeSet = false;
         if (shown != null) { shown = null; busy = false; Next(); }
@@ -297,6 +303,7 @@ class PopLyric : Window
         pill.BeginAnimation(WidthProperty, null); pill.BeginAnimation(HeightProperty, null);
         tb.Opacity = 0; pill.Opacity = 0;
         pill.ClearValue(WidthProperty); pill.ClearValue(HeightProperty);
+        pillW = pillH = 0;
         Place();
     }
 
@@ -339,8 +346,10 @@ class PopLyric : Window
         double textWidth = Math.Min(tb.MaxWidth, Math.Ceiling(tb.DesiredSize.Width));
         tb.Width = textWidth;
         tb.Measure(new Size(textWidth, double.PositiveInfinity));
-        double w = textWidth + 2 * PadX, h = Math.Ceiling(tb.DesiredSize.Height) + 2 * PadY;
-        pillW = w; pillH = h; Place();   // pil baru bisa lebih lebar: pastikan tetap di dalam layar
+        double w = textWidth + 2 * PadX;
+        double h = Math.Ceiling(tb.DesiredSize.Height) + 2 * PadY;
+        pillW = w; pillH = h;
+        Place();
         TimeSpan din = TimeSpan.FromMilliseconds(220);
         CubicEase ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         if (!sizeSet) { pill.Width = w; pill.Height = h; sizeSet = true; }
