@@ -12,7 +12,6 @@ partial class Island
     // =====================================================================
     void Hover()
     {
-        if (back) return;
         PT p; GetCursorPos(out p);
         PresentationSource src = PresentationSource.FromVisual(this);
         if (src == null) return;
@@ -22,6 +21,18 @@ partial class Island
         double x0 = Left + windowW - w - m, x1 = Left + windowW + m;
         double y0 = Top + (windowH - h) / 2 - m, y1 = Top + (windowH + h) / 2 + m;
         bool inside = d.X >= x0 && d.X <= x1 && d.Y >= y0 && d.Y <= y1;
+
+        if (back)
+        {
+            if (inside)
+            {
+                SetBack(false);
+                SetOpen(true);
+                outSince = DateTime.MinValue;
+            }
+            return;
+        }
+
         if (editing && !inside && (GetAsyncKeyState(0x01) & 0x8000) != 0) EndEdit(false); // klik di luar island
         if (isDragging || editing) inside = true;
         if (inside)

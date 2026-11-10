@@ -59,9 +59,15 @@ partial class Island
 
     void ToggleBack()
     {
-        back = !back;
+        SetBack(!back);
+    }
+
+    void SetBack(bool toBack)
+    {
+        if (back == toBack) return;
+        back = toBack;
         RefreshBackButton();
-        if (back) { SetOpen(false); Topmost = false; SetWindowPos(hwnd, (IntPtr)1, 0, 0, 0, 0, 0x13); }
+        if (toBack) { SetOpen(false); Topmost = false; SetWindowPos(hwnd, (IntPtr)1, 0, 0, 0, 0, 0x13); }
         else { Topmost = true; SetWindowPos(hwnd, (IntPtr)(-1), 0, 0, 0, 0, 0x13); }
     }
 
