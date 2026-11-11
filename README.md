@@ -60,6 +60,7 @@ File di dalam folder `UI` dan `Features` melengkapi kelas window utama yang sama
 - Lirik dicari dari LRCLIB (tersinkron), lalu NetEase (tersinkron), kemudian lirik polos LRCLIB.
 - Jika autostart diaktifkan, entri disimpan di registry pengguna (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
 - Jika ada error saat berjalan, catatannya ditulis ke `error.log` di folder aplikasi.
+- Jika pemasangan update gagal, log updater tersedia di `%LOCALAPPDATA%\WinIsle\Updates\updater.log`.
 
 ## Lisensi dan atribusi
 

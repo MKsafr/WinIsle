@@ -15,6 +15,7 @@ partial class Island
     //  KONTROL
     // =====================================================================
     static readonly double[] WidgetScales = { 0.5, 0.75, 1, 1.5, 2 };
+    static readonly object UpdateLogLock = new object();
 
     static string WidgetScaleLabel(double scale)
     {
@@ -239,9 +240,52 @@ partial class Island
             }
             catch (Exception ex)
             {
+                LogUpdate("Pemeriksaan update gagal: " + ex);
                 Prog.Log("Pemeriksaan update gagal: " + ex);
             }
         });
+    }
+
+    static string QuoteProcessArgument(string value)
+    {
+        StringBuilder quoted = new StringBuilder("\"");
+        int backslashes = 0;
+        foreach (char c in value)
+        {
+            if (c == '\\') { backslashes++; continue; }
+            if (c == '"')
+            {
+                quoted.Append('\\', backslashes * 2 + 1);
+                quoted.Append('"');
+            }
+            else
+            {
+                quoted.Append('\\', backslashes);
+                quoted.Append(c);
+            }
+            backslashes = 0;
+        }
+        quoted.Append('\\', backslashes * 2);
+        quoted.Append('"');
+        return quoted.ToString();
+    }
+
+    static void LogUpdate(string message)
+    {
+        try
+        {
+            string logDirectory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "WinIsle", "Updates");
+            Directory.CreateDirectory(logDirectory);
+            lock (UpdateLogLock)
+                File.AppendAllText(Path.Combine(logDirectory, "updater.log"),
+                    DateTime.Now.ToString("s") + " " + message + Environment.NewLine);
+        }
+        catch (Exception ex)
+        {
+            Prog.Log("Gagal menulis log updater: " + ex);
+        }
     }
 
     void DownloadAndInstallUpdate(string downloadUrl, string expectedDigest, Version version)
@@ -255,6 +299,7 @@ partial class Island
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "WinIsle", "Updates", version.ToString(3) + "-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(updateDir);
+                LogUpdate("Pembaruan " + version.ToString(3) + ": mulai mengunduh paket.");
                 string zipPath = Path.Combine(updateDir, "WinIsle.zip");
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(downloadUrl);
                 request.UserAgent = "WinIsle";
@@ -275,6 +320,8 @@ partial class Island
                         output.Write(buffer, 0, count);
                     }
                 }
+                LogUpdate("Pembaruan " + version.ToString(3) + ": unduhan selesai (" +
+                    new FileInfo(zipPath).Length + " byte).");
 
                 string actualDigest;
                 using (SHA256 sha = SHA256.Create())
@@ -282,6 +329,7 @@ partial class Island
                     actualDigest = "sha256:" + BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "").ToLowerInvariant();
                 if (!actualDigest.Equals(expectedDigest, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Verifikasi SHA-256 ZIP update gagal.");
+                LogUpdate("Pembaruan " + version.ToString(3) + ": verifikasi SHA-256 berhasil.");
 
                 string updaterPath = Path.Combine(updateDir, "WinIsleUpdater.ps1");
                 using (FileStream input = File.OpenRead(zipPath))
@@ -295,22 +343,35 @@ partial class Island
                         source.CopyTo(target);
                 }
 
-                string args = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + updaterPath +
-                    "\" -ZipPath \"" + zipPath + "\" -InstallDirectory \"" + AppDomain.CurrentDomain.BaseDirectory +
-                    "\" -ParentPid " + System.Diagnostics.Process.GetCurrentProcess().Id;
+                string args = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File " +
+                    QuoteProcessArgument(updaterPath) + " -ZipPath " + QuoteProcessArgument(zipPath) +
+                    " -InstallDirectory " + QuoteProcessArgument(AppDomain.CurrentDomain.BaseDirectory) +
+                    " -ParentPid " + System.Diagnostics.Process.GetCurrentProcess().Id;
                 System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("powershell.exe", args);
                 psi.UseShellExecute = false;
                 psi.CreateNoWindow = true;
-                System.Diagnostics.Process.Start(psi);
+                psi.WorkingDirectory = updateDir;
+                using (System.Diagnostics.Process installer = System.Diagnostics.Process.Start(psi))
+                {
+                    if (installer == null) throw new InvalidOperationException("Proses updater tidak dapat dijalankan.");
+                    LogUpdate("Pembaruan " + version.ToString(3) + ": helper updater dijalankan (PID " +
+                        installer.Id + ").");
+                }
 
                 Dispatcher.BeginInvoke(new Action(delegate { ExitApp(); }));
             }
             catch (Exception ex)
             {
+                LogUpdate("Pemasangan update gagal: " + ex);
                 Prog.Log("Pemasangan update gagal: " + ex);
                 if (updateDir != null)
                 {
-                    try { Directory.Delete(updateDir, true); } catch (Exception cleanupError) { Prog.Log(cleanupError.ToString()); }
+                    try { Directory.Delete(updateDir, true); }
+                    catch (Exception cleanupError)
+                    {
+                        LogUpdate("Pembersihan file update gagal: " + cleanupError);
+                        Prog.Log(cleanupError.ToString());
+                    }
                 }
                 Dispatcher.BeginInvoke(new Action(delegate
                 {
