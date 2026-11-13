@@ -250,12 +250,12 @@ partial class Island
         pages[6] = Col(clipHint, clipScroll, clipClear);
 
         // 7: Sistem
-        tCpu = T("CPU", 1, 12); tRam = T("RAM", 1, 12); tVram = T("VRAM dedicated", 1, 10.5); tDisk = T("", 0.7, 10.5);
+        tCpu = T("CPU", 1, 12); tRam = T("RAM", 1, 12); tVram = T("VRAM dedicated", 1, 10.5); tTemp = T("Suhu zona  tidak tersedia", 1, 10.5); tDisk = T("", 0.7, 10.5);
         pCpu = NewBar(); pRam = NewBar();
         tNetLbl = T("Internet (\u2193 unduh, \u2191 unggah)", 0.6, 10.5); tNetLbl.Margin = new Thickness(0, 4, 0, 1);
         tNet = T("", 0.9, 12);
         tNet.Margin = new Thickness(0, 0, 0, 4); tDisk.Margin = new Thickness(0, 0, 0, 8);
-        StackPanel sys = Col(tCpu, pCpu, tRam, pRam, tVram, tNetLbl, tNet, tDisk, BuildBatteryCard());
+        StackPanel sys = Col(tCpu, pCpu, tRam, pRam, tVram, tTemp, tNetLbl, tNet, tDisk, BuildBatteryCard());
         sys.Margin = new Thickness(0, 4, 0, 0);
         pages[7] = sys;
 

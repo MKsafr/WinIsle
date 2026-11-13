@@ -22,6 +22,8 @@ partial class Island
     double netDown, netUp;
     DateTime vramUpdatedAt = DateTime.MinValue;
     bool vramWarningLogged;
+    DateTime temperatureUpdatedAt = DateTime.MinValue;
+    bool temperatureWarningLogged;
 
     void UpdateVram()
     {
@@ -55,6 +57,55 @@ partial class Island
             {
                 Prog.Log("Tidak dapat membaca kapasitas VRAM dedicated: " + ex);
                 vramWarningLogged = true;
+            }
+        }
+    }
+
+    void UpdateTemperature()
+    {
+        DateTime now = DateTime.UtcNow;
+        if (temperatureUpdatedAt != DateTime.MinValue &&
+            (now - temperatureUpdatedAt).TotalSeconds < 10) return;
+        temperatureUpdatedAt = now;
+        UpdateThermalZoneTemperature();
+    }
+
+    void UpdateThermalZoneTemperature()
+    {
+        try
+        {
+            double hottestTemperature = double.MinValue;
+            string hottestZone = null;
+            using (ManagementObjectSearcher searcher = new ManagementObjectSearcher(
+                "SELECT Name, HighPrecisionTemperature FROM Win32_PerfFormattedData_Counters_ThermalZoneInformation"))
+            using (ManagementObjectCollection zones = searcher.Get())
+            {
+                foreach (ManagementObject zone in zones)
+                using (zone)
+                {
+                    if (zone["HighPrecisionTemperature"] == null) continue;
+
+                    double rawTemperature = Convert.ToDouble(zone["HighPrecisionTemperature"]);
+                    // ACPI thermal-zone readings are reported in tenths of a kelvin.
+                    double celsius = rawTemperature / 10.0 - 273.15;
+                    if (double.IsNaN(celsius) || double.IsInfinity(celsius) ||
+                        celsius < -50 || celsius > 150 || celsius <= hottestTemperature) continue;
+
+                    hottestTemperature = celsius;
+                    hottestZone = Convert.ToString(zone["Name"]);
+                }
+            }
+
+            tTemp.Text = hottestZone == null ? "Suhu zona  tidak tersedia" :
+                "Suhu zona " + hottestZone + "  " + hottestTemperature.ToString("0.0", IC) + "\u00B0C";
+        }
+        catch (Exception ex)
+        {
+            tTemp.Text = "Suhu zona  tidak tersedia";
+            if (!temperatureWarningLogged)
+            {
+                Prog.Log("Tidak dapat membaca suhu zona termal: " + ex);
+                temperatureWarningLogged = true;
             }
         }
     }
@@ -156,6 +207,7 @@ partial class Island
 
         pCpu.Value = cpuPct; tCpu.Text = "CPU  " + (int)Math.Round(cpuPct) + "%";
         UpdateVram();
+        UpdateTemperature();
         MEM m = new MEM(); m.dwLength = (uint)Marshal.SizeOf(typeof(MEM));
         if (GlobalMemoryStatusEx(ref m))
         {

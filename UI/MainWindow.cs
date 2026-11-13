@@ -99,7 +99,7 @@ partial class Island : Window
     Button btnPlay, btnAwake, btnBack, btnAuto, btnGlow, calTitleBtn, btnLyricRefresh, btnLyricSettings, btnTimerPop;
     Button btnCancelTimer;
     TextBlock clockFull, tabTitle, topClock, botClock, titleText;
-    TextBlock tTitle, tArtist, tPos, tDur, lStat, lOff, lPlainT, lHint, tCpu, tRam, tVram, tDisk, tBat;
+    TextBlock tTitle, tArtist, tPos, tDur, lStat, lOff, lPlainT, lHint, tCpu, tRam, tVram, tTemp, tDisk, tBat;
     TextBlock[] ly = new TextBlock[5];
     StackPanel lSync, clipList;
     ScrollViewer lPlain;

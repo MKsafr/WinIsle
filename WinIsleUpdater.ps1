@@ -23,7 +23,9 @@ function Write-UpdateLog([string]$Message) {
 $stage = Join-Path $env:TEMP ("WinIsle-update-" + [guid]::NewGuid().ToString("N"))
 $backup = Join-Path $stage "backup"
 $payload = Join-Path $stage "payload"
-$names = @("WinIsle.exe", "media.ps1", "kana.ps1", "scantext.ps1", "README.md", "LICENSE", "WinIsleUpdater.ps1")
+$names = @(
+    "WinIsle.exe", "media.ps1", "kana.ps1", "scantext.ps1",
+    "README.md", "LICENSE", "WinIsleUpdater.ps1")
 $required = $names
 $replaced = New-Object System.Collections.Generic.List[string]
 
@@ -51,14 +53,16 @@ try {
     try {
         $found = @{}
         foreach ($entry in $archive.Entries) {
-            if ($names -notcontains $entry.FullName) {
+            $entryName = $entry.FullName.Replace('\', '/')
+            if ($names -notcontains $entryName) {
                 throw "Isi ZIP tidak dikenali: $($entry.FullName)"
             }
-            if ($found.ContainsKey($entry.FullName)) {
+            if ($found.ContainsKey($entryName)) {
                 throw "ZIP berisi file duplikat: $($entry.FullName)"
             }
-            $found[$entry.FullName] = $true
-            $target = Join-Path $payload $entry.FullName
+            $found[$entryName] = $true
+            $target = Join-Path $payload ($entryName.Replace('/', '\'))
+            New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
             [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target)
         }
     }
@@ -67,23 +71,28 @@ try {
     }
 
     foreach ($name in $required) {
+        $relativePath = $name.Replace('/', '\')
         if (-not $found.ContainsKey($name) -or
-            -not (Test-Path -LiteralPath (Join-Path $payload $name) -PathType Leaf)) {
+            -not (Test-Path -LiteralPath (Join-Path $payload $relativePath) -PathType Leaf)) {
             throw "Paket update tidak memiliki file wajib: $name"
         }
     }
     Write-UpdateLog "Paket ZIP tervalidasi; semua file wajib tersedia."
 
     foreach ($name in $names) {
-        $source = Join-Path $payload $name
+        $relativePath = $name.Replace('/', '\')
+        $source = Join-Path $payload $relativePath
         if (Test-Path -LiteralPath $source -PathType Leaf) {
-            $destination = Join-Path $InstallDirectory $name
+            $destination = Join-Path $InstallDirectory $relativePath
+            $saved = Join-Path $backup $relativePath
+            New-Item -ItemType Directory -Path (Split-Path -Parent $saved) -Force | Out-Null
             if (Test-Path -LiteralPath $destination -PathType Leaf) {
-                Copy-Item -LiteralPath $destination -Destination (Join-Path $backup $name)
+                Copy-Item -LiteralPath $destination -Destination $saved
             }
-            $replaced.Add($name)
+            $replaced.Add($relativePath)
+            New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
             Copy-Item -LiteralPath $source -Destination $destination -Force
-            Write-UpdateLog "File diperbarui: $name"
+            Write-UpdateLog "File diperbarui: $relativePath"
         }
     }
 

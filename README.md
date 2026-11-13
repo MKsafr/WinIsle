@@ -17,7 +17,7 @@ WinIsle memiliki sembilan tab. Pindah tab dengan tombol ▲ / ▼ atau ikon fitu
 | Kalender | Kalender Indonesia |
 | Scan Teks | Pilih area layar dengan `Alt+Shift+O`, kenali teks secara lokal, lalu salin hasilnya |
 | Clipboard | Riwayat salinan dan salin ulang |
-| Sistem | CPU, RAM, VRAM dedicated, jaringan, disk, dan baterai |
+| Sistem | CPU, RAM, VRAM dedicated, suhu zona termal (jika tersedia), jaringan, disk, dan baterai |
 | Kontrol | Keep-awake, skala widget, kunci layar, autostart, glow, dan keluar |
 
 Saat island ciut, jam dan judul lagu ditampilkan vertikal. Gunakan `Ctrl+Alt+I` atau ikon tray untuk memindahkan island ke depan atau belakang jendela lain.
@@ -25,7 +25,7 @@ Saat island ciut, jam dan judul lagu ditampilkan vertikal. Gunakan `Ctrl+Alt+I` 
 ## Persyaratan
 
 - Windows 10 atau 11
-- .NET Framework 4.x
+- .NET Framework 4.7.2 atau lebih baru
 - Windows PowerShell 5.1
 
 ## Download dan menjalankan
@@ -39,7 +39,7 @@ Saat island ciut, jam dan judul lagu ditampilkan vertikal. Gunakan `Ctrl+Alt+I` 
 
 1. Pastikan Windows PowerShell 5.1 dan .NET Framework 4.x tersedia.
 2. Pastikan folder `App`, `Interop`, `UI`, `Features`, serta file `media.ps1`, `kana.ps1`, `scantext.ps1`, dan `WinIsle.ico` tersedia di folder proyek.
-3. Jalankan `build.bat`. Skrip akan mencari `csc.exe` dari .NET Framework dan membangun `WinIsle.exe`.
+3. Pastikan folder dan file source proyek tersedia. `build.bat` akan mencari `csc.exe` dan membangun `WinIsle.exe`.
 4. Jika WinIsle sedang terbuka, skrip build akan menutup proses tersebut sebelum mengganti executable.
 5. Setelah build berhasil, jalankan `WinIsle.exe`.
 
@@ -61,6 +61,7 @@ File di dalam folder `UI` dan `Features` melengkapi kelas window utama yang sama
 - Jika autostart diaktifkan, entri disimpan di registry pengguna (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
 - Jika ada error saat berjalan, catatannya ditulis ke `error.log` di folder aplikasi.
 - Jika pemasangan update gagal, log updater tersedia di `%LOCALAPPDATA%\WinIsle\Updates\updater.log`.
+- Suhu dibaca dari zona termal Windows jika perangkat menyediakannya. Ini bukan pembacaan khusus CPU/GPU, dan mungkin tidak tersedia pada sebagian perangkat.
 
 ## Lisensi dan atribusi
 
